@@ -1,0 +1,19 @@
+services:
+  gcli-api:
+    container_name: gcli-api
+    env_file: .env
+    build: .
+    ports:
+      - ":7860"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "sh", "-c", "curl -f http://localhost:7860/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  default:
+    external: true
+    name: caddy-network
