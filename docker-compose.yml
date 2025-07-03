@@ -1,8 +1,7 @@
 services:
   gcli-api:
+    image: ghcr.io/otwako/gcli-api:latest
     container_name: gcli-api
-    env_file: .env
-    build: .
     ports:
       - ":7860"
     restart: unless-stopped
