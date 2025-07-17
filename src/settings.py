@@ -27,6 +27,7 @@ class Settings(BaseSettings):
 
     # Debugging
     DEBUG: bool = False
+    DEBUG_REDACT_LOGS: bool = False
 
     class Config:
         env_file = ".env"

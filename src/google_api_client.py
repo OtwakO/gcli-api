@@ -48,15 +48,6 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False) -> Resp
         "request": payload.get("request", {}),
     }
 
-    # # Always include thoughts in response.
-    # if (request_data := final_payload.get("request")) and (
-    #     generation_config := request_data.get("generationConfig")
-    # ):
-    #     if thinking_config := generation_config.get("thinkingConfig", {}):
-    #         final_payload["request"]["generationConfig"]["thinkingConfig"].update(
-    #             {"includeThoughts": False}
-    #         )
-
     final_post_data = json.dumps(final_payload, ensure_ascii=False)
 
     if settings.DEBUG:
@@ -64,28 +55,26 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False) -> Resp
 
         debug_payload = copy.deepcopy(final_payload)
 
-        request_data = debug_payload.get("request", {})
-        contents_list = request_data.get("contents", [])
+        if settings.DEBUG_REDACT_LOGS:
+            request_data = debug_payload.get("request", {})
+            contents_list = request_data.get("contents", [])
 
-        if isinstance(contents_list, list):
-            for i, content_item in enumerate(contents_list):
-                if isinstance(content_item, str):
-                    # Handle the user's case of a list of strings
-                    contents_list[i] = "<REDACTED>"
-                elif isinstance(content_item, dict):
-                    # Handle the standard case of a list of Content objects
-                    parts_list = content_item.get("parts", [])
-                    if isinstance(parts_list, list):
-                        for part in parts_list:
-                            if isinstance(part, dict):
-                                if "text" in part:
-                                    part["text"] = "<REDACTED>"
-                                # Also redact inline data for images, etc.
-                                if "inlineData" in part and isinstance(
-                                    part.get("inlineData"), dict
-                                ):
-                                    if "data" in part.get("inlineData", {}):
-                                        part["inlineData"]["data"] = "<REDACTED>"
+            if isinstance(contents_list, list):
+                for i, content_item in enumerate(contents_list):
+                    if isinstance(content_item, str):
+                        contents_list[i] = "<REDACTED>"
+                    elif isinstance(content_item, dict):
+                        parts_list = content_item.get("parts", [])
+                        if isinstance(parts_list, list):
+                            for part in parts_list:
+                                if isinstance(part, dict):
+                                    if "text" in part:
+                                        part["text"] = "<REDACTED>"
+                                    if "inlineData" in part and isinstance(
+                                        part.get("inlineData"), dict
+                                    ):
+                                        if "data" in part.get("inlineData", {}):
+                                            part["inlineData"]["data"] = "<REDACTED>"
 
         logging.info(
             f"DEBUG: Sending request to Google: {json.dumps(debug_payload, ensure_ascii=False)}"
@@ -152,40 +141,10 @@ async def _stream_generator(resp):
                 except json.JSONDecodeError:
                     continue
 
-
-# def adjust_thinking_config(thinking_config: dict) -> dict:
-#     thinking_budget = int(thinking_config.get("thinkingBudget", 0))
-#     include_thoughts = thinking_config.get("includeThoughts", False)
-
-#     final_thinking_budget = thinking_budget
-
-#     if final_thinking_budget != 0:
-#         include_thoughts = True
-
-#     # If the thinkingBudget is between 0 and 128, we don't want to include thoughts.
-#     if 0 <= thinking_budget <= 128:
-#         include_thoughts = False
-
-#     # If the thinkingBudget is -1, enable thoughts.
-#     if thinking_budget <= -1:
-#         final_thinking_budget = -1
-
-#     logging.info(f"Setting thinking budget to {final_thinking_budget}")
-#     logging.info(f"Setting include thoughts to {include_thoughts}")
-
-#     thinking_config.update(
-#         {
-#             "includeThoughts": include_thoughts,
-#             "thinkingBudget": final_thinking_budget,
-#         }
-#     )
-
-#     return thinking_config
-
-
 def build_gemini_payload_from_openai(openai_payload: dict) -> dict:
     model = openai_payload.get("model")
     safety_settings = openai_payload.get("safetySettings", DEFAULT_SAFETY_SETTINGS)
+    
     request_data = {
         k: v
         for k, v in {
@@ -199,6 +158,7 @@ def build_gemini_payload_from_openai(openai_payload: dict) -> dict:
         }.items()
         if v is not None
     }
+    
     return {"model": model, "request": request_data}
 
 

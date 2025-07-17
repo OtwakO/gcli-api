@@ -12,9 +12,23 @@ def openai_request_to_gemini(
 ) -> Dict[str, Any]:
     contents = []
     for message in openai_request.messages:
-        role = "model" if message.role == "assistant" else "user"
-        if isinstance(message.content, list):
-            parts = []
+        role = "user"
+        if message.role == "assistant":
+            role = "model"
+        elif message.role == "tool":
+            role = "tool"
+
+        parts = []
+        if role == "tool":
+            parts.append(
+                {
+                    "functionResponse": {
+                        "name": message.tool_call_id,
+                        "response": {"content": message.content},
+                    }
+                }
+            )
+        elif isinstance(message.content, list):
             for part in message.content:
                 if part.get("type") == "text":
                     parts.append({"text": part.get("text", "")})
@@ -35,9 +49,21 @@ def openai_request_to_gemini(
                             )
                         except ValueError:
                             continue
-            contents.append({"role": role, "parts": parts})
-        else:
-            contents.append({"role": role, "parts": [{"text": message.content}]})
+        elif message.content is not None:
+            parts.append({"text": message.content})
+
+        if message.role == "assistant" and message.tool_calls:
+            for tool_call in message.tool_calls:
+                parts.append(
+                    {
+                        "functionCall": {
+                            "name": tool_call.function.name,
+                            "args": json.loads(tool_call.function.arguments),
+                        }
+                    }
+                )
+        
+        contents.append({"role": role, "parts": parts})
 
     generation_config = {
         k: v
@@ -60,11 +86,34 @@ def openai_request_to_gemini(
         if v is not None
     }
 
+    tools = None
+    if openai_request.tools:
+        tools = [{"functionDeclarations": [t["function"] for t in openai_request.tools]}]
+
+    tool_config = None
+    if openai_request.tool_choice:
+        if isinstance(openai_request.tool_choice, str):
+            if openai_request.tool_choice in ["none", "auto"]:
+                tool_config = {
+                    "functionCallingConfig": {"mode": openai_request.tool_choice.upper()}
+                }
+        elif isinstance(openai_request.tool_choice, dict):
+            function_name = openai_request.tool_choice.get("function", {}).get("name")
+            if function_name:
+                tool_config = {
+                    "functionCallingConfig": {
+                        "mode": "ANY",
+                        "allowedFunctionNames": [function_name],
+                    }
+                }
+
     return {
         "contents": contents,
         "generationConfig": generation_config,
         "safetySettings": DEFAULT_SAFETY_SETTINGS,
         "model": openai_request.model,
+        "tools": tools,
+        "toolConfig": tool_config,
     }
 
 
@@ -73,20 +122,44 @@ def gemini_response_to_openai(
 ) -> Dict[str, Any]:
     choices = []
     for candidate in gemini_response.get("candidates", []):
-        role = (
-            "assistant" if candidate.get("content", {}).get("role", "model") else "user"
-        )
         parts = candidate.get("content", {}).get("parts", [])
-        content = parts[0].get("text", "") if parts else ""
+        
+        tool_calls = []
+        content_text = None
+
+        for part in parts:
+            if "functionCall" in part and part["functionCall"]:
+                fc = part["functionCall"]
+                tool_calls.append(
+                    {
+                        "id": fc.get("name"),
+                        "type": "function",
+                        "function": {
+                            "name": fc.get("name"),
+                            "arguments": json.dumps(fc.get("args", {})),
+                        },
+                    }
+                )
+            if "text" in part and part["text"]:
+                content_text = part["text"]
+
+        message = {
+            "role": "assistant",
+            "content": content_text,
+        }
+        if tool_calls:
+            message["tool_calls"] = tool_calls
+            message["content"] = None
+
         choices.append(
             {
                 "index": candidate.get("index", 0),
-                "message": {"role": role, "content": content},
+                "message": message,
                 "finish_reason": _map_finish_reason(candidate.get("finishReason")),
             }
         )
     return {
-        "id": str(uuid.uuid4()),
+        "id": "chatcmpl-" + str(uuid.uuid4()),
         "object": "chat.completion",
         "created": int(time.time()),
         "model": model,
@@ -99,12 +172,39 @@ def gemini_stream_chunk_to_openai(
 ) -> Dict[str, Any]:
     choices = []
     for candidate in gemini_chunk.get("candidates", []):
+        delta = {}
         parts = candidate.get("content", {}).get("parts", [])
-        content = parts[0].get("text", "") if parts else ""
+        
+        tool_calls = []
+        content_text = None
+
+        for part in parts:
+            if "text" in part and part["text"]:
+                content_text = part["text"]
+            elif "functionCall" in part:
+                fc = part["functionCall"]
+                tool_call_chunk = {
+                    "index": 0,
+                    "id": fc.get("name"),
+                    "type": "function",
+                    "function": {
+                        "name": fc.get("name"),
+                        "arguments": json.dumps(fc.get("args", {})),
+                    },
+                }
+                tool_calls.append(tool_call_chunk)
+        
+        if content_text:
+            delta["content"] = content_text
+        
+        if tool_calls:
+            delta["tool_calls"] = tool_calls
+            delta["role"] = "assistant"
+
         choices.append(
             {
                 "index": candidate.get("index", 0),
-                "delta": {"content": content},
+                "delta": delta,
                 "finish_reason": _map_finish_reason(candidate.get("finishReason")),
             }
         )
@@ -124,4 +224,17 @@ def _map_finish_reason(gemini_reason: str) -> str:
         return "length"
     if gemini_reason in ["SAFETY", "RECITATION"]:
         return "content_filter"
+    if gemini_reason == "TOOL_USE":
+        return "tool_calls"
     return None
+
+def build_gemini_request_from_openai_chat(
+    openai_request: OpenAIChatCompletionRequest,
+) -> Dict[str, Any]:
+    """
+    This function is intended to be a more direct mapping for internal use,
+    focusing on preserving the structure as much as possible.
+    """
+    gemini_request = openai_request_to_gemini(openai_request)
+    gemini_request["model"] = openai_request.model
+    return gemini_request

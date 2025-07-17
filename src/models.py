@@ -1,10 +1,22 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Union, Dict, Any
 
+# Tool Calling Models
+class FunctionCall(BaseModel):
+    name: str
+    arguments: str
+
+class ToolCall(BaseModel):
+    id: str
+    type: str = "function"
+    function: FunctionCall
+
 # OpenAI Models
 class OpenAIChatMessage(BaseModel):
     role: str
-    content: Union[str, List[Dict[str, Any]]]
+    content: Union[str, List[Dict[str, Any]], None] = None
+    tool_calls: Optional[List[ToolCall]] = None
+    tool_call_id: Optional[str] = None
 
 class OpenAIChatCompletionRequest(BaseModel):
     model: str
@@ -19,9 +31,11 @@ class OpenAIChatCompletionRequest(BaseModel):
     n: Optional[int] = None
     seed: Optional[int] = None
     response_format: Optional[Dict[str, Any]] = None
+    tools: Optional[List[Dict[str, Any]]] = None
+    tool_choice: Optional[Union[str, Dict[str, Any]]] = None
     
     class Config:
-        extra = "allow"  # Allow additional fields not explicitly defined
+        extra = "allow"
 
 class OpenAIChatCompletionChoice(BaseModel):
     index: int
@@ -37,6 +51,8 @@ class OpenAIChatCompletionResponse(BaseModel):
 
 class OpenAIDelta(BaseModel):
     content: Optional[str] = None
+    tool_calls: Optional[List[ToolCall]] = None
+    role: Optional[str] = None
 
 class OpenAIChatCompletionStreamChoice(BaseModel):
     index: int
@@ -51,8 +67,13 @@ class OpenAIChatCompletionStreamResponse(BaseModel):
     choices: List[OpenAIChatCompletionStreamChoice]
 
 # Gemini Models
+class GeminiFunctionCall(BaseModel):
+    name: str
+    args: Dict[str, Any]
+
 class GeminiPart(BaseModel):
-    text: str
+    text: Optional[str] = None
+    functionCall: Optional[GeminiFunctionCall] = None
 
 class GeminiContent(BaseModel):
     role: str
@@ -60,6 +81,7 @@ class GeminiContent(BaseModel):
 
 class GeminiRequest(BaseModel):
     contents: List[GeminiContent]
+    tools: Optional[List[Dict[str, Any]]] = None
 
 class GeminiCandidate(BaseModel):
     content: GeminiContent
