@@ -4,19 +4,22 @@
 
 This project provides a powerful proxy server that acts as a bridge to Google's Gemini API. It is designed to be a versatile tool for developers, offering two main modes of operation:
 
-1.  **OpenAI-Compatible Endpoint**: Emulates the OpenAI API, allowing you to use Google's Gemini models with any tool or library designed for OpenAI (e.g., LangChain, custom scripts).
-2.  **Native Gemini Endpoint**: Provides a direct, pass-through proxy to the native Google Gemini API for developers who want to use its full feature set.
+1.  **OpenAI-Compatible Endpoint**: Emulates the OpenAI API, allowing you to use Google's Gemini models with any tool or library designed for OpenAI (e.g., LangChain, custom scripts). This includes full support for **Function Calling**.
+2.  **Native Gemini Endpoint**: Provides a direct, pass-through proxy to the native Google Gemini API for developers who want to use its full feature set, including native function calling.
 
 The server is built with FastAPI, uses Pydantic for robust configuration management, and features a simple web-based OAuth2 flow for initial authentication. It is designed for easy deployment and configuration.
 
 ## 2. Features
 
 -   **Dual API Support**: Use either OpenAI-compatible or native Gemini API formats.
+-   **Function Calling**: Full support for Gemini's function calling capabilities on both the OpenAI-compatible and native endpoints.
 -   **Web-Based Authentication**: Simple, one-time browser-based login to authorize the proxy with your Google account.
 -   **Robust Credential Handling**: Automatically refreshes expired tokens and can persist credentials in a local `oauth_creds.json` file or be configured statelessly via environment variables.
 -   **API Key/Password Security**: Protect your proxy endpoint with a simple password.
 -   **Environment Variable Configuration**: Easily configure all settings using a `.env` file.
 -   **Streaming Support**: Full support for streaming responses for both API types.
+-   **Response Validation**: Enforces response models for non-streaming OpenAI endpoints to ensure data integrity.
+-   **Configurable Debug Logging**: Enable detailed logs and control whether sensitive data is redacted.
 -   **Centralized Error Handling**: Consistent and informative JSON error responses.
 -   **Docker Support**: Comes with `Dockerfile` and `docker-compose.yml` for easy containerized deployment.
 
@@ -42,12 +45,7 @@ cd <repository-directory>
 It is recommended to use a virtual environment.
 
 ```bash
-# Create and activate a virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows, use `.venv\Scripts\activate`
-
-# Install dependencies
-pip install -e .
+uv sync
 ```
 
 ### Step 3: Configure Environment Variables
@@ -80,16 +78,21 @@ GEMINI_AUTH_PASSWORD="a-secure-password"
 # OAUTH_CREDS_JSON='{"client_id": "...", "client_secret": "..."}'
 
 # (Optional) Set to `true` or `1` to enable debug logging.
-# This shows the redacted request object being sent to Google's API.
+# This shows the request object being sent to Google's API.
+# By default, logs are NOT redacted when DEBUG is true.
 # DEBUG=False
+
+# (Optional) Set to `true` or `1` to redact sensitive content in debug logs.
+# Only has an effect if DEBUG is also enabled.
+# DEBUG_REDACT_LOGS=False
 ```
 
 ### Step 4: Run the Server
 
 Start the server using `uvicorn`.
 
-```bash
-uvicorn src.main:app --host 0.0.0.0 --port 7860 --reload
+```
+uv run app.py
 ```
 
 ### Step 5: Initial Authentication
@@ -160,7 +163,7 @@ These endpoints are prefixed with `/v1`.
 #### Chat Completions
 
 -   **Endpoint**: `POST /v1/chat/completions`
--   **Description**: Generates a model response for a given chat conversation. Supports both standard and streaming requests.
+-   **Description**: Generates a model response for a given chat conversation. Supports both standard and streaming requests, as well as **Function Calling**.
 -   **Example Request (Non-Streaming)**:
     ```bash
     curl http://localhost:7860/v1/chat/completions \
@@ -170,6 +173,38 @@ These endpoints are prefixed with `/v1`.
         "model": "gemini-1.5-pro",
         "messages": [
           {"role": "user", "content": "Hello, what is the capital of France?"}
+        ]
+      }'
+    ```
+-   **Example Request (Function Calling)**:
+    ```bash
+    curl http://localhost:7860/v1/chat/completions \
+      -H "Authorization: Bearer your-secure-password" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "gemini-2.5-flash",
+        "messages": [
+          {"role": "user", "content": "What is the weather like in Boston?"}
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "get_current_weather",
+              "description": "Get the current weather in a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "location": {
+                    "type": "string",
+                    "description": "The city and state, e.g. San Francisco, CA"
+                  },
+                  "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]}
+                },
+                "required": ["location"]
+              }
+            }
+          }
         ]
       }'
     ```
@@ -248,6 +283,7 @@ Configuration is managed via Pydantic in `src/settings.py` and can be overridden
 | `GEMINI_AUTH_PASSWORD`   | The password used to secure your proxy endpoints.                                                                                      | `123456`                                    |
 | `OAUTH_CREDS_JSON`       | A JSON string containing the entire content of `oauth_creds.json`. Useful for stateless deployments.                                     | `""` (empty string)                         |
 | `DEBUG`                  | Set to `true` or `1` to enable debug logging.                                                                                          | `false`                                     |
+| `DEBUG_REDACT_LOGS`      | Set to `true` or `1` to redact sensitive content in debug logs. Only has an effect if `DEBUG` is also enabled.                           | `false`                                     |
 
 ## 8. Project Structure
 

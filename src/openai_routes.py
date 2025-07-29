@@ -8,17 +8,18 @@ from fastapi.responses import StreamingResponse
 from .auth import authenticate_user
 from .constants import SUPPORTED_MODELS
 from .google_api_client import build_gemini_payload_from_openai, send_gemini_request
-from .models import OpenAIChatCompletionRequest
+from .models import OpenAIChatCompletionRequest, OpenAIChatCompletionResponse
 from .openai_transformers import (
     gemini_response_to_openai,
     gemini_stream_chunk_to_openai,
     openai_request_to_gemini,
 )
+from .settings import settings
 
 router = APIRouter()
 
 
-@router.post("/v1/chat/completions")
+@router.post("/v1/chat/completions", response_model=OpenAIChatCompletionResponse)
 async def openai_chat_completions(
     request: OpenAIChatCompletionRequest,
     http_request: Request,
@@ -28,6 +29,7 @@ async def openai_chat_completions(
         gemini_request_data = openai_request_to_gemini(request)
         gemini_payload = build_gemini_payload_from_openai(gemini_request_data)
     except Exception as e:
+        logging.error(f"Error processing OpenAI request: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=f"Request processing failed: {e}")
 
     if request.stream:
@@ -37,12 +39,23 @@ async def openai_chat_completions(
         )
     else:
         try:
+            if settings.DEBUG:
+                logging.info("Sending non-streaming request to Gemini...")
+            
             response = await send_gemini_request(gemini_payload, is_streaming=False)
             gemini_response = json.loads(response.body)
+
+            if settings.DEBUG:
+                logging.info(f"Received Gemini response: {gemini_response}")
+
             openai_response = gemini_response_to_openai(gemini_response, request.model)
+
+            if settings.DEBUG:
+                logging.info(f"Transformed to OpenAI response: {openai_response}")
+
             return openai_response
         except Exception as e:
-            logging.error(f"Non-streaming request failed: {e}")
+            logging.error(f"Non-streaming request failed: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=str(e))
 
 

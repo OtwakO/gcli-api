@@ -83,3 +83,7 @@ Thumbs.db
 original_src/
 old-implementation/
 other-versions/
+gemini-cli/
+
+# Local Run
+Run.bat
