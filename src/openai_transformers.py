@@ -102,23 +102,33 @@ def _transform_tools(req: OpenAIChatCompletionRequest) -> Optional[List[Dict[str
         return None
     return [{"functionDeclarations": [t["function"] for t in req.tools]}]
 
-def _transform_tool_config(req: OpenAIChatCompletionRequest) -> Optional[Dict[str, Any]]:
+def _transform_tool_config(
+    req: OpenAIChatCompletionRequest,
+) -> Optional[Dict[str, Any]]:
     """Builds the toolConfig dictionary from an OpenAI request."""
     if not req.tool_choice:
         return None
-    
-    if isinstance(req.tool_choice, str) and req.tool_choice in ["none", "auto"]:
-        return {"functionCallingConfig": {"mode": req.tool_choice.upper()}}
-    
-    if isinstance(req.tool_choice, dict):
+
+    mode = None
+    allowed_function_names = None
+
+    if isinstance(req.tool_choice, str):
+        if req.tool_choice == "none":
+            mode = "NONE"
+        elif req.tool_choice == "auto":
+            mode = "AUTO"
+    elif isinstance(req.tool_choice, dict):
         function_name = req.tool_choice.get("function", {}).get("name")
         if function_name:
-            return {
-                "functionCallingConfig": {
-                    "mode": "ANY",
-                    "allowedFunctionNames": [function_name],
-                }
-            }
+            mode = "ANY"
+            allowed_function_names = [function_name]
+
+    if mode:
+        config = {"mode": mode}
+        if allowed_function_names:
+            config["allowedFunctionNames"] = allowed_function_names
+        return {"functionCallingConfig": config}
+
     return None
 
 def openai_request_to_gemini(req: OpenAIChatCompletionRequest) -> Dict[str, Any]:

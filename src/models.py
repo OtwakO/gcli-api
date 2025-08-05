@@ -108,11 +108,20 @@ class GeminiContent(BaseModel):
 class GeminiSystemInstruction(BaseModel):
     parts: List[GeminiPart]
 
+class GeminiFunctionCallingConfig(BaseModel):
+    mode: Optional[str] = None  # "AUTO", "ANY", "NONE"
+    allowedFunctionNames: Optional[List[str]] = None
+
+
+class GeminiToolConfig(BaseModel):
+    functionCallingConfig: Optional[GeminiFunctionCallingConfig] = None
+
+
 class GeminiRequest(BaseModel):
     contents: List[GeminiContent]
     systemInstruction: Optional[GeminiSystemInstruction] = None
     tools: Optional[List[Dict[str, Any]]] = None
-    toolConfig: Optional[Dict[str, Any]] = None
+    toolConfig: Optional[GeminiToolConfig] = None
     safetySettings: Optional[List[Dict[str, Any]]] = None
     generationConfig: Optional[Dict[str, Any]] = None
     cachedContent: Optional[str] = None
