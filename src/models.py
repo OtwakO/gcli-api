@@ -74,6 +74,7 @@ class GeminiFunctionCall(BaseModel):
 class GeminiPart(BaseModel):
     text: Optional[str] = None
     functionCall: Optional[GeminiFunctionCall] = None
+    thought: Optional[bool] = None
 
 class GeminiContent(BaseModel):
     role: str

@@ -1,25 +1,19 @@
-import json
 import logging
 import traceback
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .credential_manager import credential_manager
 from .gemini_routes import router as gemini_router
+from .logger import format_log, get_logger, setup_logging
 from .openai_routes import router as openai_router
 from .settings import settings
 from .ui import create_page
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    force=True,
-)
-logging.getLogger("httpx").setLevel(logging.WARNING)
+logger = get_logger(__name__)
 
 
 class PrettyJSONResponse(Response):
@@ -40,14 +34,18 @@ class PrettyJSONResponse(Response):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if credential_manager._credentials:
-        logging.info(
+        logger.info(
             f"Proxy is running with {len(credential_manager._credentials)} credential(s)."
         )
     else:
-        logging.warning(
+        logger.warning(
             "Proxy is running without any credentials. "
             "Please run the `generate_credentials.py` script to create credentials, "
             "or configure the CREDENTIALS_JSON_LIST environment variable."
+        )
+    if settings.GEMINI_AUTH_PASSWORD == "123456":
+        logger.warning(
+            'Security risk: The default authentication password is being used. Please set a strong GEMINI_AUTH_PASSWORD in your environment.'
         )
     yield
 
@@ -56,7 +54,7 @@ app = FastAPI(lifespan=lifespan, default_response_class=PrettyJSONResponse)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -66,27 +64,49 @@ app.add_middleware(
 @app.middleware("http")
 async def debug_logging_middleware(request: Request, call_next):
     if settings.DEBUG:
-        logging.info("--- Incoming Request ---")
-        logging.info(f"Method: {request.method}")
-        logging.info(f"URL: {request.url}")
-        headers = json.dumps(dict(request.headers), indent=2)
-        logging.info(f"Headers: {headers}")
-        logging.info("------------------------")
+        log_data = {
+            "method": request.method,
+            "url": str(request.url),
+            "headers": dict(request.headers),
+        }
+
+        logger.debug(format_log("Incoming Request", log_data, is_json=True))
 
     response = await call_next(request)
     return response
 
 
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"message": exc.detail, "type": "api_error"}},
+    )
+
+
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handles known HTTP exceptions and returns a structured error response."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"message": exc.detail, "type": "api_error"}},
+    )
+
+
 @app.exception_handler(Exception)
-async def validation_exception_handler(request, err):
+async def generic_exception_handler(request: Request, exc: Exception):
+    """Handles any other unexpected exceptions to prevent crashes."""
     logging.error(f"Unhandled exception for request {request.method} {request.url}:")
     logging.error(traceback.format_exc())
     return JSONResponse(
         status_code=500,
         content={
             "error": {
-                "message": str(err),
+                "message": "An unexpected internal server error occurred.",
                 "type": "unexpected_error",
+                "detail": str(exc),
             }
         },
     )

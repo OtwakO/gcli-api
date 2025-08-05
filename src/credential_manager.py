@@ -4,6 +4,7 @@ import logging
 import re
 from typing import List, Optional
 
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.oauth2.credentials import Credentials
 from pydantic import BaseModel, Field
@@ -11,6 +12,9 @@ from fastapi import HTTPException
 
 from .settings import settings
 from .constants import SCOPES
+from .logger import get_logger
+
+logger = get_logger(__name__)
 
 class ManagedCredential(BaseModel):
     """Encapsulates a credential and its associated state."""
@@ -18,6 +22,7 @@ class ManagedCredential(BaseModel):
     project_id: Optional[str] = None
     user_email: Optional[str] = None
     is_onboarded: bool = False
+    is_valid: bool = Field(True, exclude=True)  # Exclude from serialization
 
     class Config:
         arbitrary_types_allowed = True
@@ -33,11 +38,11 @@ class CredentialManager:
     def load_credentials(self):
         """Loads credentials using the hybrid priority system."""
         if self._load_from_env():
-            logging.info(f"Loaded {len(self._credentials)} credentials from CREDENTIALS_JSON_LIST env var.")
+            logger.info(f"Loaded {len(self._credentials)} credentials from CREDENTIALS_JSON_LIST env var.")
         else:
             self._load_from_files()
             if self._credentials:
-                logging.info(f"Loaded {len(self._credentials)} credentials from oauth_creds_*.json files.")
+                logger.info(f"Loaded {len(self._credentials)} credentials from oauth_creds_*.json files.")
 
     def _load_from_env(self) -> bool:
         creds_json_list_str = settings.CREDENTIALS_JSON_LIST
@@ -53,7 +58,7 @@ class CredentialManager:
                 self._add_credential_from_info(cred_info)
             return True
         except (json.JSONDecodeError, ValueError) as e:
-            logging.error(f"Failed to parse CREDENTIALS_JSON_LIST: {e}")
+            logger.error(f"Failed to parse CREDENTIALS_JSON_LIST: {e}")
             return False
 
     def _load_from_files(self):
@@ -65,11 +70,11 @@ class CredentialManager:
                     cred_info = json.load(f)
                     self._add_credential_from_info(cred_info, str(file_path))
             except Exception as e:
-                logging.warning(f"Could not load credential file {file_path}: {e}")
+                logger.warning(f"Could not load credential file {file_path}: {e}")
 
     def _add_credential_from_info(self, cred_info: dict, source: str = "env"):
         if "refresh_token" not in cred_info:
-            logging.warning(f"Skipping a credential from {source} due to missing 'refresh_token'.")
+            logger.warning(f"Skipping a credential from {source} due to missing 'refresh_token'.")
             return
 
         minimal_creds_data = {
@@ -91,25 +96,54 @@ class CredentialManager:
         )
 
     async def get_next_credential(self) -> Optional[ManagedCredential]:
-        """Rotates and returns the next available credential in a thread-safe manner."""
+        """Rotates and returns the next valid and refreshed credential."""
         if not self._credentials:
             return None
 
         async with self._lock:
-            index = self._next_credential_index
-            self._next_credential_index = (self._next_credential_index + 1) % len(self._credentials)
-        
-        managed_cred = self._credentials[index]
+            # Loop through all available credentials once to find a valid one
+            for _ in range(len(self._credentials)):
+                index = self._next_credential_index
+                managed_cred = self._credentials[index]
+                self._next_credential_index = (self._next_credential_index + 1) % len(self._credentials)
 
-        if managed_cred.credential.expired and managed_cred.credential.refresh_token:
-            try:
-                logging.info(f"Credential at index {index} expired. Refreshing...")
-                await asyncio.to_thread(managed_cred.credential.refresh, GoogleAuthRequest())
-                logging.info(f"Credential at index {index} refreshed successfully.")
-            except Exception as e:
-                logging.error(f"Failed to refresh credential at index {index}: {e}")
-        
-        return managed_cred
+                # Skip credentials that have been marked as invalid
+                if not managed_cred.is_valid:
+                    continue
+
+                if settings.DEBUG:
+                    email = managed_cred.user_email or "unknown"
+                    token_snippet = managed_cred.credential.refresh_token[-4:]
+                    logger.debug(f"Rotating to credential index {index} (User: {email}, Token ends in: ...{token_snippet})")
+
+                # If the credential is not expired, it's good to use immediately
+                if not managed_cred.credential.expired:
+                    return managed_cred
+
+                # If it's expired, try to refresh it
+                if managed_cred.credential.refresh_token:
+                    try:
+                        logger.info(f"Credential for {managed_cred.user_email} expired. Refreshing...")
+                        await asyncio.to_thread(managed_cred.credential.refresh, GoogleAuthRequest())
+                        logger.info(f"Credential for {managed_cred.user_email} refreshed successfully.")
+                        return managed_cred  # Return the now-refreshed credential
+                    except RefreshError as e:
+                        logger.error(
+                            f"Failed to refresh credential for {managed_cred.user_email}. "
+                            f"This credential will be marked as invalid for this session. Error: {e}"
+                        )
+                        managed_cred.is_valid = False  # Mark as invalid
+                        continue  # Try the next credential
+                    except Exception as e:
+                        logger.error(f"An unexpected error occurred while refreshing credential for {managed_cred.user_email}: {e}")
+                        # Don't mark as invalid for transient errors, just try the next one
+                        continue
+
+        # If we've looped through all credentials and found no valid ones
+        logger.error("No valid credentials available in the pool after checking all of them.")
+        return None
+
+
 
 credential_manager = CredentialManager()
 

@@ -2,9 +2,6 @@
 Constants used across the application.
 """
 
-# API Endpoints
-CODE_ASSIST_ENDPOINT = "https://cloudcode-pa.googleapis.com"
-
 # Client Configuration
 CLI_VERSION = "0.1.5"  # Match current gemini-cli version
 

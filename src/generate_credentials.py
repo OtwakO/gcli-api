@@ -18,24 +18,11 @@ from google_auth_oauthlib.flow import Flow
 from .constants import SCOPES
 from .settings import settings
 from .utils import get_client_metadata, get_user_agent
+from .logger import setup_logging, get_logger, format_log
 
 # --- Logging Configuration ---
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    force=True,
-)
-# Only enable verbose httpx logging if DEBUG is on
-if settings.DEBUG:
-    logging.getLogger("httpx").setLevel(logging.INFO)
-else:
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-
-
-def _debug_log(message: str):
-    """Helper to log messages only when DEBUG is enabled."""
-    if settings.DEBUG:
-        logging.info(message)
+setup_logging()
+logger = get_logger(__name__)
 
 
 # --- Configuration ---
@@ -58,7 +45,7 @@ def sanitize_for_filename(text: str) -> str:
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """Serves the main page with the login form."""
+    """Serves the main page with the login form."""    
     content = """
         <h1>Gemini Credential Generator</h1>
         <p>
@@ -131,7 +118,7 @@ async def oauth2callback(request: Request):
             final_project_id = ""
             # Check if we need to discover the project ID
             if returned_state == "__DISCOVER__":
-                logging.info(
+                logger.info(
                     "No project ID specified, attempting to discover it from the API..."
                 )
                 discovery_payload = {"metadata": get_client_metadata()}
@@ -141,36 +128,35 @@ async def oauth2callback(request: Request):
                     "Content-Type": "application/json",
                 }
 
-                _debug_log(
-                    f"Sending project discovery request with payload: {json.dumps(discovery_payload)}"
+                logger.debug(
+                    format_log("Sending project discovery request", discovery_payload, is_json=True)
                 )
 
                 resp = await client.post(
-                    "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist",
+                    f"{settings.CODE_ASSIST_ENDPOINT}/v1internal:loadCodeAssist",
                     data=json.dumps(discovery_payload),
                     headers=discovery_headers,
                 )
 
-                _debug_log(
-                    f"Received project discovery response ({resp.status_code}):"
-                )
                 try:
                     response_json = resp.json()
-                    _debug_log(json.dumps(response_json, indent=2))
+                    logger.debug(
+                        format_log(f"Received project discovery response ({resp.status_code})", response_json, is_json=True)
+                    )
                     resp.raise_for_status()
                     final_project_id = response_json.get(
                         "cloudaicompanionProject", "unknown_project"
                     )
-                    logging.info(f"Discovered project ID: {final_project_id}")
+                    logger.info(f"Discovered project ID: {final_project_id}")
                 except (json.JSONDecodeError, httpx.HTTPStatusError) as e:
-                    logging.error(
+                    logger.error(
                         f"Failed to discover project ID. Response text: {resp.text}"
                     )
                     raise e
             else:
                 # Use the project ID passed in the state
                 final_project_id = returned_state
-                logging.info(f"Using specified project ID: {final_project_id}")
+                logger.info(f"Using specified project ID: {final_project_id}")
 
 
         creds_data = {
@@ -202,7 +188,7 @@ async def oauth2callback(request: Request):
         """
         return create_page("Success", content)
     except Exception as e:
-        logging.error(f"Error during OAuth callback: {e}", exc_info=True)
+        logger.error(f"Error during OAuth callback: {e}", exc_info=True)
         content = f"""
         <h1>Error</h1>
         <p>An unexpected error occurred while generating the credential. Please see the details below:</p>

@@ -7,114 +7,137 @@ from .constants import DEFAULT_SAFETY_SETTINGS
 from .models import OpenAIChatCompletionRequest, GeminiResponse
 
 
-def openai_request_to_gemini(
-    openai_request: OpenAIChatCompletionRequest,
-) -> Dict[str, Any]:
-    contents = []
-    for message in openai_request.messages:
-        role = "user"
-        if message.role == "assistant":
-            role = "model"
-        elif message.role == "tool":
-            role = "tool"
+import json
+import time
+import uuid
+from typing import Any, Dict, List, Optional
 
+from .constants import DEFAULT_SAFETY_SETTINGS
+from .models import OpenAIChatCompletionRequest, GeminiResponse, OpenAIChatMessage
+from .logger import get_logger
+
+logger = get_logger(__name__)
+
+def _transform_message_part(part: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Transforms a single part of an OpenAI message content."""
+    part_type = part.get("type")
+    if part_type == "text":
+        return {"text": part.get("text", "")}
+    elif part_type == "image_url":
+        image_url = part.get("image_url", {}).get("url")
+        if not image_url or ";base64," not in image_url:
+            logger.warning(f"Skipping invalid or non-base64 image_url part: {part}")
+            return None
+        try:
+            # Format: data:image/jpeg;base64,LzlqLzRBQ...            
+            header, base64_data = image_url.split(",", 1)
+            mime_type = header.split(":")[1].split(";")[0]
+            return {"inlineData": {"mimeType": mime_type, "data": base64_data}}
+        except (ValueError, IndexError) as e:
+            logger.warning(f"Could not parse image_url: {image_url}. Error: {e}")
+            return None
+    return None
+
+def _transform_messages(messages: List[OpenAIChatMessage]) -> List[Dict[str, Any]]:
+    """Transforms a list of OpenAI messages to Gemini's content format."""
+    contents = []
+    for message in messages:
+        role = "model" if message.role == "assistant" else "tool" if message.role == "tool" else "user"
+        
         parts = []
         if role == "tool":
-            parts.append(
-                {
-                    "functionResponse": {
-                        "name": message.tool_call_id,
-                        "response": {"content": message.content},
-                    }
+            parts.append({
+                "functionResponse": {
+                    "name": message.tool_call_id,
+                    "response": {"content": message.content},
                 }
-            )
+            })
         elif isinstance(message.content, list):
             for part in message.content:
-                if part.get("type") == "text":
-                    parts.append({"text": part.get("text", "")})
-                elif part.get("type") == "image_url":
-                    image_url = part.get("image_url", {}).get("url")
-                    if image_url:
-                        try:
-                            mime_type, base64_data = image_url.split(";")
-                            _, mime_type = mime_type.split(":")
-                            _, base64_data = base64_data.split(",")
-                            parts.append(
-                                {
-                                    "inlineData": {
-                                        "mimeType": mime_type,
-                                        "data": base64_data,
-                                    }
-                                }
-                            )
-                        except ValueError:
-                            continue
+                transformed_part = _transform_message_part(part)
+                if transformed_part:
+                    parts.append(transformed_part)
         elif message.content is not None:
             parts.append({"text": message.content})
 
         if message.role == "assistant" and message.tool_calls:
             for tool_call in message.tool_calls:
-                parts.append(
-                    {
-                        "functionCall": {
-                            "name": tool_call.function.name,
-                            "args": json.loads(tool_call.function.arguments),
-                        }
+                try:
+                    args = json.loads(tool_call.function.arguments)
+                except json.JSONDecodeError:
+                    logger.warning(f"Could not decode tool call arguments: {tool_call.function.arguments}")
+                    args = {}
+                parts.append({
+                    "functionCall": {
+                        "name": tool_call.function.name,
+                        "args": args,
                     }
-                )
+                })
         
-        contents.append({"role": role, "parts": parts})
+        if parts:
+            contents.append({"role": role, "parts": parts})
+            
+    return contents
 
-    generation_config = {
-        k: v
-        for k, v in {
-            "temperature": openai_request.temperature,
-            "topP": openai_request.top_p,
-            "maxOutputTokens": openai_request.max_tokens,
-            "stopSequences": [openai_request.stop]
-            if isinstance(openai_request.stop, str)
-            else openai_request.stop,
-            "frequencyPenalty": openai_request.frequency_penalty,
-            "presencePenalty": openai_request.presence_penalty,
-            "candidateCount": openai_request.n,
-            "seed": openai_request.seed,
-            "responseMimeType": "application/json"
-            if openai_request.response_format
-            and openai_request.response_format.get("type") == "json_object"
-            else None,
-        }.items()
-        if v is not None
+def _transform_generation_config(req: OpenAIChatCompletionRequest) -> Dict[str, Any]:
+    """Builds the generationConfig dictionary from an OpenAI request."""
+    config = {
+        "temperature": req.temperature,
+        "topP": req.top_p,
+        "maxOutputTokens": req.max_tokens,
+        "stopSequences": [req.stop] if isinstance(req.stop, str) else req.stop,
+        "frequencyPenalty": req.frequency_penalty,
+        "presencePenalty": req.presence_penalty,
+        "candidateCount": req.n,
+        "seed": req.seed,
+    }
+    if req.response_format and req.response_format.get("type") == "json_object":
+        config["responseMimeType"] = "application/json"
+        
+    return {k: v for k, v in config.items() if v is not None}
+
+def _transform_tools(req: OpenAIChatCompletionRequest) -> Optional[List[Dict[str, Any]]]:
+    """Builds the tools list from an OpenAI request."""
+    if not req.tools:
+        return None
+    return [{"functionDeclarations": [t["function"] for t in req.tools]}]
+
+def _transform_tool_config(req: OpenAIChatCompletionRequest) -> Optional[Dict[str, Any]]:
+    """Builds the toolConfig dictionary from an OpenAI request."""
+    if not req.tool_choice:
+        return None
+    
+    if isinstance(req.tool_choice, str) and req.tool_choice in ["none", "auto"]:
+        return {"functionCallingConfig": {"mode": req.tool_choice.upper()}}
+    
+    if isinstance(req.tool_choice, dict):
+        function_name = req.tool_choice.get("function", {}).get("name")
+        if function_name:
+            return {
+                "functionCallingConfig": {
+                    "mode": "ANY",
+                    "allowedFunctionNames": [function_name],
+                }
+            }
+    return None
+
+def openai_request_to_gemini(req: OpenAIChatCompletionRequest) -> Dict[str, Any]:
+    """Converts an OpenAI Chat Completion request to a Gemini API request payload."""
+    payload = {
+        "contents": _transform_messages(req.messages),
+        "generationConfig": _transform_generation_config(req),
+        "safetySettings": DEFAULT_SAFETY_SETTINGS,  # Assuming constant for now
     }
 
-    tools = None
-    if openai_request.tools:
-        tools = [{"functionDeclarations": [t["function"] for t in openai_request.tools]}]
+    tools = _transform_tools(req)
+    if tools:
+        payload["tools"] = tools
 
-    tool_config = None
-    if openai_request.tool_choice:
-        if isinstance(openai_request.tool_choice, str):
-            if openai_request.tool_choice in ["none", "auto"]:
-                tool_config = {
-                    "functionCallingConfig": {"mode": openai_request.tool_choice.upper()}
-                }
-        elif isinstance(openai_request.tool_choice, dict):
-            function_name = openai_request.tool_choice.get("function", {}).get("name")
-            if function_name:
-                tool_config = {
-                    "functionCallingConfig": {
-                        "mode": "ANY",
-                        "allowedFunctionNames": [function_name],
-                    }
-                }
+    tool_config = _transform_tool_config(req)
+    if tool_config:
+        payload["toolConfig"] = tool_config
 
-    return {
-        "contents": contents,
-        "generationConfig": generation_config,
-        "safetySettings": DEFAULT_SAFETY_SETTINGS,
-        "model": openai_request.model,
-        "tools": tools,
-        "toolConfig": tool_config,
-    }
+    return payload
 
 
 def gemini_response_to_openai(
