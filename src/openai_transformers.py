@@ -123,11 +123,30 @@ def _transform_tool_config(req: OpenAIChatCompletionRequest) -> Optional[Dict[st
 
 def openai_request_to_gemini(req: OpenAIChatCompletionRequest) -> Dict[str, Any]:
     """Converts an OpenAI Chat Completion request to a Gemini API request payload."""
+    system_instruction = None
+    messages = list(req.messages)  # Make a copy to modify
+
+    # Find and extract the system message if it exists
+    system_message_index = -1
+    for i, msg in enumerate(messages):
+        if msg.role == "system":
+            if isinstance(msg.content, str):
+                system_instruction = {"parts": [{"text": msg.content}]}
+            system_message_index = i
+            break
+
+    # If a system message was found, remove it from the list
+    if system_message_index != -1:
+        messages.pop(system_message_index)
+
     payload = {
-        "contents": _transform_messages(req.messages),
+        "contents": _transform_messages(messages),
         "generationConfig": _transform_generation_config(req),
-        "safetySettings": DEFAULT_SAFETY_SETTINGS,  # Assuming constant for now
+        "safetySettings": DEFAULT_SAFETY_SETTINGS,
     }
+
+    if system_instruction:
+        payload["systemInstruction"] = system_instruction
 
     tools = _transform_tools(req)
     if tools:

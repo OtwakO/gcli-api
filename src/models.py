@@ -71,20 +71,51 @@ class GeminiFunctionCall(BaseModel):
     name: str
     args: Dict[str, Any]
 
+class GeminiFunctionResponse(BaseModel):
+    name: str
+    response: Dict[str, Any]
+
+class GeminiFileData(BaseModel):
+    mimeType: str
+    fileUri: str
+
+class GeminiInlineData(BaseModel):
+    mimeType: str
+    data: str
+
+class GeminiExecutableCode(BaseModel):
+    language: str
+    code: str
+
+class GeminiCodeExecutionResult(BaseModel):
+    outcome: str
+    output: str
+
 class GeminiPart(BaseModel):
     text: Optional[str] = None
+    inlineData: Optional[GeminiInlineData] = None
     functionCall: Optional[GeminiFunctionCall] = None
+    functionResponse: Optional[GeminiFunctionResponse] = None
+    fileData: Optional[GeminiFileData] = None
+    executableCode: Optional[GeminiExecutableCode] = None
+    codeExecutionResult: Optional[GeminiCodeExecutionResult] = None
     thought: Optional[bool] = None
 
 class GeminiContent(BaseModel):
     role: str
     parts: List[GeminiPart]
 
+class GeminiSystemInstruction(BaseModel):
+    parts: List[GeminiPart]
+
 class GeminiRequest(BaseModel):
     contents: List[GeminiContent]
+    systemInstruction: Optional[GeminiSystemInstruction] = None
     tools: Optional[List[Dict[str, Any]]] = None
+    toolConfig: Optional[Dict[str, Any]] = None
     safetySettings: Optional[List[Dict[str, Any]]] = None
     generationConfig: Optional[Dict[str, Any]] = None
+    cachedContent: Optional[str] = None
 
 class GeminiCandidate(BaseModel):
     content: GeminiContent

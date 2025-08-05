@@ -100,7 +100,7 @@ async def _onboard_user(managed_cred: ManagedCredential):
             # This is a long-running operation (LRO), so we poll.
             for _ in range(5):  # Poll up to 5 times (20 seconds total)
                 onboard_resp = await client.post(
-                    f"{CODE_ASSIST_ENDPOINT}/v1internal:onboardUser",
+                    f"{settings.CODE_ASSIST_ENDPOINT}/v1internal:onboardUser",
                     data=json.dumps(onboard_req_payload, ensure_ascii=False),
                     headers=headers,
                 )
