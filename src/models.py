@@ -82,11 +82,13 @@ class GeminiContent(BaseModel):
 class GeminiRequest(BaseModel):
     contents: List[GeminiContent]
     tools: Optional[List[Dict[str, Any]]] = None
+    safetySettings: Optional[List[Dict[str, Any]]] = None
+    generationConfig: Optional[Dict[str, Any]] = None
 
 class GeminiCandidate(BaseModel):
     content: GeminiContent
     finish_reason: Optional[str] = None
-    index: int
+    index: int = 0
 
 class GeminiResponse(BaseModel):
     candidates: List[GeminiCandidate]

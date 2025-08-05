@@ -7,6 +7,8 @@ from fastapi import APIRouter, Request, Response, Depends, HTTPException
 from .auth import authenticate_user
 from .google_api_client import send_gemini_request, build_gemini_payload_from_native
 from .constants import SUPPORTED_MODELS
+from .models import GeminiRequest
+from .credential_manager import ManagedCredential, get_rotating_credential
 
 router = APIRouter()
 
@@ -20,7 +22,12 @@ async def list_models(request: Request, username: str = Depends(authenticate_use
     )
 
 @router.api_route("/{full_path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-async def gemini_proxy(request: Request, full_path: str, username: str = Depends(authenticate_user)):
+async def gemini_proxy(
+    request: Request,
+    full_path: str,
+    username: str = Depends(authenticate_user),
+    managed_cred: ManagedCredential = Depends(get_rotating_credential),
+):
     post_data = await request.body()
     is_streaming = "stream" in full_path.lower()
 
@@ -31,14 +38,18 @@ async def gemini_proxy(request: Request, full_path: str, username: str = Depends
     model_name = model_match.group(1)
 
     try:
-        incoming_request = json.loads(post_data) if post_data else {}
+        incoming_request_data = json.loads(post_data) if post_data else {}
+        # Validate with Pydantic model
+        incoming_request = GeminiRequest.model_validate(incoming_request_data)
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=400, detail=f"Invalid JSON in request body: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid request body: {e}")
 
-    gemini_payload = build_gemini_payload_from_native(incoming_request, model_name)
+    gemini_payload = build_gemini_payload_from_native(incoming_request.model_dump(exclude_unset=True), model_name)
 
     try:
-        return await send_gemini_request(gemini_payload, is_streaming=is_streaming)
+        return await send_gemini_request(managed_cred, gemini_payload, is_streaming=is_streaming)
     except Exception as e:
         logging.error(f"Gemini proxy error: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))

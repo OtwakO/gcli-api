@@ -5,31 +5,28 @@ import logging
 import httpx
 from fastapi import Response
 from fastapi.responses import StreamingResponse
-from google.auth.transport.requests import Request as GoogleAuthRequest
 
-from .auth import get_credentials, get_user_project_id, onboard_user, save_credentials
+from .auth import get_user_project_id, onboard_user
+from .credential_manager import ManagedCredential
 from .constants import CODE_ASSIST_ENDPOINT, DEFAULT_SAFETY_SETTINGS
+from .models import GeminiRequest, GeminiResponse
 from .settings import settings
-from .utils import get_user_agent
+from .utils import get_user_agent, create_redacted_payload
 
 
-async def send_gemini_request(payload: dict, is_streaming: bool = False) -> Response:
-    creds = await get_credentials()
+async def send_gemini_request(
+    managed_cred: ManagedCredential, payload: dict, is_streaming: bool = False
+) -> Response:
+    creds = managed_cred.credential
     if not creds:
-        raise Exception("Proxy not authenticated. Please log in.")
+        raise Exception("Invalid credential object provided.")
 
-    if creds.expired and creds.refresh_token:
-        try:
-            await asyncio.to_thread(creds.refresh, GoogleAuthRequest())
-            save_credentials(creds)
-        except Exception as e:
-            raise Exception(f"Token refresh failed: {e}")
-
-    proj_id = await get_user_project_id(creds)
+    # Pass the managed_cred object to the helper functions
+    proj_id = await get_user_project_id(managed_cred)
     if not proj_id:
         raise Exception("Failed to get user project ID.")
 
-    await onboard_user(creds, proj_id)
+    await onboard_user(managed_cred)
 
     action = "streamGenerateContent" if is_streaming else "generateContent"
     target_url = f"{CODE_ASSIST_ENDPOINT}/v1internal:{action}"
@@ -51,42 +48,39 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False) -> Resp
     final_post_data = json.dumps(final_payload, ensure_ascii=False)
 
     if settings.DEBUG:
-        import copy
-
-        debug_payload = copy.deepcopy(final_payload)
-
+        logging.info(f"--- Credential Details ---")
+        logging.info(f"Project ID: {proj_id}")
+        if managed_cred.user_email:
+            logging.info(f"User Email: {managed_cred.user_email}")
+        if managed_cred.credential and managed_cred.credential.refresh_token:
+            token_snippet = managed_cred.credential.refresh_token[-5:]
+            logging.info(f"Credential Used (Refresh Token ending in): ...{token_snippet}")
+        logging.info(f"--- Upstream Request to Google ---")
+        logging.info(f"URL: {target_url}")
+        logging.info(f"Headers: {json.dumps(request_headers, indent=2)}")
         if settings.DEBUG_REDACT_LOGS:
-            request_data = debug_payload.get("request", {})
-            contents_list = request_data.get("contents", [])
-
-            if isinstance(contents_list, list):
-                for i, content_item in enumerate(contents_list):
-                    if isinstance(content_item, str):
-                        contents_list[i] = "<REDACTED>"
-                    elif isinstance(content_item, dict):
-                        parts_list = content_item.get("parts", [])
-                        if isinstance(parts_list, list):
-                            for part in parts_list:
-                                if isinstance(part, dict):
-                                    if "text" in part:
-                                        part["text"] = "<REDACTED>"
-                                    if "inlineData" in part and isinstance(
-                                        part.get("inlineData"), dict
-                                    ):
-                                        if "data" in part.get("inlineData", {}):
-                                            part["inlineData"]["data"] = "<REDACTED>"
-
-        logging.info(
-            f"DEBUG: Sending request to Google: {json.dumps(debug_payload, ensure_ascii=False)}"
-        )
+            redacted_payload = create_redacted_payload(final_payload)
+            logging.info(f"Payload: {json.dumps(redacted_payload, indent=2, ensure_ascii=False)}")
+        else:
+            logging.info(f"Payload: {json.dumps(final_payload, indent=2, ensure_ascii=False)}")
+        logging.info("------------------------------------")
 
     async with httpx.AsyncClient(timeout=300) as client:
         resp = await client.post(
             target_url, data=final_post_data, headers=request_headers
         )
 
-        if settings.DEBUG:
-            logging.info(f"[Status Code {resp.status_code}]Response: {resp.text}")
+    if settings.DEBUG:
+        logging.info(f"--- Upstream Response from Google ---")
+        logging.info(f"Status Code: {resp.status_code}")
+        logging.info(f"Headers: {json.dumps(dict(resp.headers), indent=2)}")
+        try:
+            # Try to pretty-print JSON if possible, otherwise print raw text
+            response_json = resp.json()
+            logging.info(f"Body: {json.dumps(response_json, indent=2, ensure_ascii=False)}")
+        except json.JSONDecodeError:
+            logging.info(f"Body: {resp.text}")
+        logging.info("-------------------------------------")
 
     if resp.status_code != 200:
         error_message = f"Upstream API error: {resp.status_code}"
@@ -113,9 +107,11 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False) -> Resp
 
             google_api_response = json.loads(response_text)
             standard_gemini_response = google_api_response.get("response")
+            
+            validated_response = GeminiResponse.model_validate(standard_gemini_response)
 
             return Response(
-                content=json.dumps(standard_gemini_response, ensure_ascii=False),
+                content=validated_response.model_dump_json(),
                 status_code=200,
                 media_type="application/json; charset=utf-8",
             )
@@ -124,6 +120,9 @@ async def send_gemini_request(payload: dict, is_streaming: bool = False) -> Resp
                 f"Failed to decode JSON from Google API response: {resp.text}"
             )
             raise Exception("Failed to decode API response.")
+        except Exception as e:
+            logging.error(f"Error validating Gemini response: {e}")
+            raise Exception("Failed to validate API response.")
 
 
 async def _stream_generator(resp):
@@ -134,11 +133,10 @@ async def _stream_generator(resp):
                 try:
                     obj = json.loads(line[len("data: ") :])
                     if "response" in obj:
-                        response_chunk = json.dumps(
-                            obj["response"], separators=(",", ":"), ensure_ascii=False
-                        )
+                        validated_chunk = GeminiResponse.model_validate(obj["response"])
+                        response_chunk = validated_chunk.model_dump_json()
                         yield f"data: {response_chunk}\n\n"
-                except json.JSONDecodeError:
+                except (json.JSONDecodeError, Exception):
                     continue
 
 def build_gemini_payload_from_openai(openai_payload: dict) -> dict:
@@ -165,6 +163,10 @@ def build_gemini_payload_from_openai(openai_payload: dict) -> dict:
 def build_gemini_payload_from_native(
     native_request: dict, model_from_path: str
 ) -> dict:
-    if "safetySettings" not in native_request:
-        native_request["safetySettings"] = DEFAULT_SAFETY_SETTINGS
-    return {"model": model_from_path, "request": native_request}
+    validated_request = GeminiRequest.model_validate(native_request)
+    
+    if "safetySettings" not in validated_request.model_dump(exclude_unset=True):
+        validated_request.safetySettings = DEFAULT_SAFETY_SETTINGS
+        
+    return {"model": model_from_path, "request": validated_request.model_dump(exclude_unset=True)}
+

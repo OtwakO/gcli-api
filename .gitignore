@@ -84,6 +84,8 @@ original_src/
 old-implementation/
 other-versions/
 gemini-cli/
+PRDs/
 
 # Local Run
 Run.bat
+Gen_creds.bat

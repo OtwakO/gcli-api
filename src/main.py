@@ -1,5 +1,5 @@
+import json
 import logging
-import os
 import traceback
 from contextlib import asynccontextmanager
 
@@ -7,18 +7,18 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .auth import (
-    get_credentials,
-    get_user_project_id,
-    login,
-    oauth2callback,
-    onboard_user,
-)
+from .credential_manager import credential_manager
 from .gemini_routes import router as gemini_router
 from .openai_routes import router as openai_router
 from .settings import settings
+from .ui import create_page
 
-logging.basicConfig(level=logging.INFO)
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    force=True,
+)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
@@ -39,32 +39,15 @@ class PrettyJSONResponse(Response):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if settings.OAUTH_CREDS_JSON:
-        logging.info("OAUTH_CREDS_JSON found. Writing to credential file.")
-        try:
-            with open(settings.CREDENTIAL_FILE, "w") as f:
-                f.write(settings.OAUTH_CREDS_JSON)
-        except PermissionError:
-            logging.info(
-                "Skipping writing OAUTH_CREDS_JSON to file due to permission error."
-            )
-        except Exception as e:
-            logging.error(f"Failed to write OAUTH_CREDS_JSON: {e}.")
-
-    creds = await get_credentials()
-    if creds:
-        try:
-            proj_id = await get_user_project_id(creds)
-            if proj_id:
-                await onboard_user(creds, proj_id)
-            logging.info("Proxy is authenticated and ready.")
-        except Exception as e:
-            logging.error(
-                f"Failed during startup onboarding: {e}. Re-authentication may be needed."
-            )
+    if credential_manager._credentials:
+        logging.info(
+            f"Proxy is running with {len(credential_manager._credentials)} credential(s)."
+        )
     else:
         logging.warning(
-            f"Proxy is not authenticated. Please visit {settings.DOMAIN_NAME}/login to authenticate."
+            "Proxy is running without any credentials. "
+            "Please run the `generate_credentials.py` script to create credentials, "
+            "or configure the CREDENTIALS_JSON_LIST environment variable."
         )
     yield
 
@@ -78,6 +61,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def debug_logging_middleware(request: Request, call_next):
+    if settings.DEBUG:
+        logging.info("--- Incoming Request ---")
+        logging.info(f"Method: {request.method}")
+        logging.info(f"URL: {request.url}")
+        headers = json.dumps(dict(request.headers), indent=2)
+        logging.info(f"Headers: {headers}")
+        logging.info("------------------------")
+
+    response = await call_next(request)
+    return response
 
 
 @app.exception_handler(Exception)
@@ -97,26 +94,42 @@ async def validation_exception_handler(request, err):
 
 @app.get("/")
 async def root(request: Request):
-    if await get_credentials():
-        api_base_url = str(request.base_url).replace("http://", "https://")
-        return Response(
-            content=f"<h1>Gemini Proxy is Authenticated and Running</h1><h2>URL: {api_base_url}</h2>",
-            media_type="text/html",
-        )
+    num_credentials = len(credential_manager._credentials)
+    # Correctly determine the base URL, especially behind a proxy
+    api_base_url = str(request.base_url)
+
+    if num_credentials > 0:
+        status_class = "active"
+        status_text = "Active"
+        message = f"The proxy is running and is rotating through <strong>{num_credentials}</strong> credential(s)."
     else:
-        return Response(
-            content=f'<h1>Welcome to the Gemini Proxy</h1><p>Not authenticated. <a href="/login">Click here to log in</a>.</p>',
-            media_type="text/html",
+        status_class = "inactive"
+        status_text = "Inactive / Action Required"
+        message = (
+            "The proxy is running but has no credentials loaded. "
+            "Please run the <code>generate_credentials.py</code> script to authenticate."
         )
+
+    content = f"""
+        <h1>Gemini Rotating Proxy</h1>
+        <div class="status {status_class}">{status_text}</div>
+        <p>{message}</p>
+        <div class="info-box">
+            <p><strong>API Base URL</strong></p>
+            <div class="code-block">
+                <code id="api-base-url">{api_base_url}</code>
+                <button class="copy-btn" onclick="copyToClipboard('api-base-url', this)">Copy</button>
+            </div>
+        </div>
+        <p class="footer">This UI provides a status overview. See the documentation for API usage details.</p>
+    """
+    return create_page("Gemini Proxy Status", content)
 
 
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
 
-
-app.add_api_route("/login", login, methods=["GET"])
-app.add_api_route("/oauth2callback", oauth2callback, methods=["GET"])
 
 app.include_router(openai_router)
 app.include_router(gemini_router, prefix="/v1beta")

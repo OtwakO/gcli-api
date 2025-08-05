@@ -9,6 +9,7 @@ CODE_ASSIST_ENDPOINT = "https://cloudcode-pa.googleapis.com"
 CLI_VERSION = "0.1.5"  # Match current gemini-cli version
 
 SCOPES = [
+    "openid",
     "https://www.googleapis.com/auth/cloud-platform",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",

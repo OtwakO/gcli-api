@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 
 from pydantic_settings import BaseSettings
 
@@ -10,9 +10,6 @@ class Settings(BaseSettings):
     )
     CLIENT_SECRET: str = "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"
 
-    # Google Cloud Project Configuration
-    GOOGLE_CLOUD_PROJECT: str = ""
-
     # Server Configuration
     PORT: int = 7860
     DOMAIN_NAME: str = f"http://localhost:{PORT}"
@@ -21,9 +18,10 @@ class Settings(BaseSettings):
     GEMINI_AUTH_PASSWORD: str = "123456"
 
     # File Paths
-    PERSISTENT_STORAGE_PATH: str = os.path.dirname(os.path.abspath(__file__))
-    CREDENTIAL_FILE: str = os.path.join(PERSISTENT_STORAGE_PATH, "oauth_creds.json")
-    OAUTH_CREDS_JSON: str = ""
+    # Base path for storing persistent data, like credential files.
+    PERSISTENT_STORAGE_PATH: Path = Path(__file__).parent
+    # A JSON string containing a list of credential objects.
+    CREDENTIALS_JSON_LIST: str = ""
 
     # Debugging
     DEBUG: bool = False

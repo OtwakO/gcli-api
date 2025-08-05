@@ -4,7 +4,7 @@ import uuid
 from typing import Any, Dict
 
 from .constants import DEFAULT_SAFETY_SETTINGS
-from .models import OpenAIChatCompletionRequest
+from .models import OpenAIChatCompletionRequest, GeminiResponse
 
 
 def openai_request_to_gemini(
@@ -118,30 +118,30 @@ def openai_request_to_gemini(
 
 
 def gemini_response_to_openai(
-    gemini_response: Dict[str, Any], model: str
+    gemini_response: GeminiResponse, model: str
 ) -> Dict[str, Any]:
     choices = []
-    for candidate in gemini_response.get("candidates", []):
-        parts = candidate.get("content", {}).get("parts", [])
+    for candidate in gemini_response.candidates:
+        parts = candidate.content.parts
         
         tool_calls = []
         content_text = None
 
         for part in parts:
-            if "functionCall" in part and part["functionCall"]:
-                fc = part["functionCall"]
+            if part.functionCall:
+                fc = part.functionCall
                 tool_calls.append(
                     {
-                        "id": fc.get("name"),
+                        "id": fc.name,
                         "type": "function",
                         "function": {
-                            "name": fc.get("name"),
-                            "arguments": json.dumps(fc.get("args", {})),
+                            "name": fc.name,
+                            "arguments": json.dumps(fc.args),
                         },
                     }
                 )
-            if "text" in part and part["text"]:
-                content_text = part["text"]
+            if part.text:
+                content_text = part.text
 
         message = {
             "role": "assistant",
@@ -153,9 +153,9 @@ def gemini_response_to_openai(
 
         choices.append(
             {
-                "index": candidate.get("index", 0),
+                "index": candidate.index,
                 "message": message,
-                "finish_reason": _map_finish_reason(candidate.get("finishReason")),
+                "finish_reason": _map_finish_reason(candidate.finish_reason),
             }
         )
     return {
@@ -168,28 +168,28 @@ def gemini_response_to_openai(
 
 
 def gemini_stream_chunk_to_openai(
-    gemini_chunk: Dict[str, Any], model: str, response_id: str
+    gemini_chunk: GeminiResponse, model: str, response_id: str
 ) -> Dict[str, Any]:
     choices = []
-    for candidate in gemini_chunk.get("candidates", []):
+    for candidate in gemini_chunk.candidates:
         delta = {}
-        parts = candidate.get("content", {}).get("parts", [])
+        parts = candidate.content.parts
         
         tool_calls = []
         content_text = None
 
         for part in parts:
-            if "text" in part and part["text"]:
-                content_text = part["text"]
-            elif "functionCall" in part:
-                fc = part["functionCall"]
+            if part.text:
+                content_text = part.text
+            elif part.functionCall:
+                fc = part.functionCall
                 tool_call_chunk = {
                     "index": 0,
-                    "id": fc.get("name"),
+                    "id": fc.name,
                     "type": "function",
                     "function": {
-                        "name": fc.get("name"),
-                        "arguments": json.dumps(fc.get("args", {})),
+                        "name": fc.name,
+                        "arguments": json.dumps(fc.args),
                     },
                 }
                 tool_calls.append(tool_call_chunk)
@@ -203,9 +203,9 @@ def gemini_stream_chunk_to_openai(
 
         choices.append(
             {
-                "index": candidate.get("index", 0),
+                "index": candidate.index,
                 "delta": delta,
-                "finish_reason": _map_finish_reason(candidate.get("finishReason")),
+                "finish_reason": _map_finish_reason(candidate.finish_reason),
             }
         )
     return {
@@ -228,13 +228,3 @@ def _map_finish_reason(gemini_reason: str) -> str:
         return "tool_calls"
     return None
 
-def build_gemini_request_from_openai_chat(
-    openai_request: OpenAIChatCompletionRequest,
-) -> Dict[str, Any]:
-    """
-    This function is intended to be a more direct mapping for internal use,
-    focusing on preserving the structure as much as possible.
-    """
-    gemini_request = openai_request_to_gemini(openai_request)
-    gemini_request["model"] = openai_request.model
-    return gemini_request

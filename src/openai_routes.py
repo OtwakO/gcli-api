@@ -7,8 +7,9 @@ from fastapi.responses import StreamingResponse
 
 from .auth import authenticate_user
 from .constants import SUPPORTED_MODELS
+from .credential_manager import ManagedCredential, get_rotating_credential
 from .google_api_client import build_gemini_payload_from_openai, send_gemini_request
-from .models import OpenAIChatCompletionRequest, OpenAIChatCompletionResponse
+from .models import OpenAIChatCompletionRequest, OpenAIChatCompletionResponse, GeminiResponse
 from .openai_transformers import (
     gemini_response_to_openai,
     gemini_stream_chunk_to_openai,
@@ -24,6 +25,7 @@ async def openai_chat_completions(
     request: OpenAIChatCompletionRequest,
     http_request: Request,
     username: str = Depends(authenticate_user),
+    managed_cred: ManagedCredential = Depends(get_rotating_credential),
 ):
     try:
         gemini_request_data = openai_request_to_gemini(request)
@@ -34,16 +36,18 @@ async def openai_chat_completions(
 
     if request.stream:
         return StreamingResponse(
-            _openai_stream_generator(gemini_payload, request.model),
+            _openai_stream_generator(managed_cred, gemini_payload, request.model),
             media_type="text/event-stream",
         )
     else:
         try:
             if settings.DEBUG:
                 logging.info("Sending non-streaming request to Gemini...")
-            
-            response = await send_gemini_request(gemini_payload, is_streaming=False)
-            gemini_response = json.loads(response.body)
+
+            response = await send_gemini_request(
+                managed_cred, gemini_payload, is_streaming=False
+            )
+            gemini_response = GeminiResponse.model_validate_json(response.body)
 
             if settings.DEBUG:
                 logging.info(f"Received Gemini response: {gemini_response}")
@@ -59,20 +63,26 @@ async def openai_chat_completions(
             raise HTTPException(status_code=500, detail=str(e))
 
 
-async def _openai_stream_generator(gemini_payload, model):
+async def _openai_stream_generator(
+    managed_cred: ManagedCredential, gemini_payload, model
+):
     response_id = "chatcmpl-" + str(uuid.uuid4())
     try:
-        response = await send_gemini_request(gemini_payload, is_streaming=True)
+        response = await send_gemini_request(
+            managed_cred, gemini_payload, is_streaming=True
+        )
         async for chunk in response.body_iterator:
             if isinstance(chunk, bytes):
                 chunk = chunk.decode("utf-8")
             if chunk.startswith("data: "):
                 try:
-                    gemini_chunk = json.loads(chunk[6:])
-                    if "error" in gemini_chunk:
-                        yield f"data: {json.dumps(gemini_chunk)}\n\n"
+                    gemini_chunk_data = json.loads(chunk[6:])
+                    if "error" in gemini_chunk_data:
+                        yield f"data: {json.dumps(gemini_chunk_data)}\n\n"
                         yield "data: [DONE]\n\n"
                         return
+
+                    gemini_chunk = GeminiResponse.model_validate(gemini_chunk_data)
                     openai_chunk = gemini_stream_chunk_to_openai(
                         gemini_chunk, model, response_id
                     )
@@ -106,3 +116,4 @@ async def openai_list_models(username: str = Depends(authenticate_user)):
         for model in SUPPORTED_MODELS
     ]
     return {"object": "list", "data": openai_models}
+
