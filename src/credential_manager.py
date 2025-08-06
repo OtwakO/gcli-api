@@ -1,7 +1,5 @@
 import asyncio
 import json
-import logging
-import re
 from typing import List, Optional
 
 from fastapi import HTTPException
@@ -11,7 +9,7 @@ from google.oauth2.credentials import Credentials
 from pydantic import BaseModel, Field
 
 from .constants import SCOPES
-from .logger import get_logger, format_log
+from .logger import format_log, get_logger
 from .settings import settings
 
 logger = get_logger(__name__)
@@ -78,9 +76,13 @@ class CredentialManager:
                     cred_info = json.load(f)
                     self._add_credential_from_info(cred_info, str(file_path))
             except (json.JSONDecodeError, IOError) as e:
-                logger.warning(f"Could not load or parse credential file {file_path}: {e}")
+                logger.warning(
+                    f"Could not load or parse credential file {file_path}: {e}"
+                )
             except Exception as e:
-                logger.error(f"An unexpected error occurred while loading credential file {file_path}: {e}")
+                logger.error(
+                    f"An unexpected error occurred while loading credential file {file_path}: {e}"
+                )
 
     def _add_credential_from_info(self, cred_info: dict, source: str = "env"):
         if "refresh_token" not in cred_info:
@@ -106,6 +108,57 @@ class CredentialManager:
                 user_email=user_email,
             )
         )
+
+    async def warm_up_credentials(self):
+        """Proactively refreshes any expired credentials on startup."""
+        logger.info(
+            f"Starting credential warm-up for {len(self._credentials)} credential(s)..."
+        )
+        refresh_tasks = []
+        for cred in self._credentials:
+            if cred.credential.expired and cred.credential.refresh_token:
+                refresh_tasks.append(self._refresh_credential(cred))
+
+        if not refresh_tasks:
+            logger.info("No credentials required immediate refreshing.")
+            return
+
+        results = await asyncio.gather(*refresh_tasks, return_exceptions=True)
+
+        success_count = sum(1 for r in results if r is True)
+        failure_count = len(results) - success_count
+
+        logger.info(
+            f"Credential warm-up complete. Refreshed: {success_count}, Failed: {failure_count}"
+        )
+
+    async def _refresh_credential(self, managed_cred: ManagedCredential) -> bool:
+        """Refreshes a single credential and handles errors."""
+        email = managed_cred.user_email or "unknown_email"
+        project_id = managed_cred.project_id or "unknown_project"
+        try:
+            logger.debug(
+                f"- Warming up and refreshing expired credential for {project_id} ({email})"
+            )
+            await asyncio.to_thread(
+                managed_cred.credential.refresh, GoogleAuthRequest()
+            )
+            logger.debug(
+                f"- Credential for {project_id} ({email}) refreshed successfully during warm-up."
+            )
+            return True
+        except RefreshError as e:
+            logger.error(
+                f"- Failed to refresh credential for {project_id} ({email}) during warm-up. "
+                f"Marking as invalid. Error: {e}"
+            )
+            managed_cred.is_valid = False
+            return False
+        except Exception as e:
+            logger.error(
+                f"An unexpected error occurred while refreshing credential for {email} during warm-up: {e}"
+            )
+            return False
 
     async def get_next_credential(self) -> Optional[ManagedCredential]:
         """Rotates and returns the next valid and refreshed credential."""

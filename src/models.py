@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import List, Optional, Union, Dict, Any
 
 # Tool Calling Models
@@ -133,3 +133,12 @@ class GeminiCandidate(BaseModel):
 
 class GeminiResponse(BaseModel):
     candidates: List[GeminiCandidate]
+
+class CountTokensResponse(BaseModel):
+    totalTokens: int
+
+class ContentEmbedding(BaseModel):
+    values: List[float]
+
+class EmbedContentResponse(BaseModel):
+    embedding: ContentEmbedding

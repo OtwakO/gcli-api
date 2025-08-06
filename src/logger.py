@@ -1,7 +1,7 @@
 import logging
 import json
 from rich.logging import RichHandler
-from typing import Any, Dict
+from typing import Any
 
 from .settings import settings
 

@@ -1,23 +1,19 @@
 import json
-import logging
-import time
-import uuid
-from typing import AsyncGenerator, Dict, Any, Callable, List
+from typing import Any, AsyncGenerator, Callable, Dict, List
 
 import httpx
 from pydantic import ValidationError
 
+from .logger import format_log, get_logger
 from .models import (
     GeminiResponse,
     GeminiContent,
     GeminiPart,
+    GeminiCandidate,
     OpenAIChatCompletionStreamResponse,
-    OpenAIChatCompletionStreamChoice,
-    OpenAIDelta,
 )
 from .openai_transformers import gemini_stream_chunk_to_openai
 from .settings import settings
-from .logger import get_logger, format_log
 
 logger = get_logger(__name__)
 
@@ -53,7 +49,9 @@ async def _parse_google_sse(
             raise StreamParseError(f"Validation/JSON error: {e}", data_str)
 
 
-def _coalesce_and_wrap_thoughts(parts: List[GeminiPart], tags: List[str]) -> List[GeminiPart]:
+def _coalesce_and_wrap_thoughts(
+    parts: List[GeminiPart], tags: List[str]
+) -> List[GeminiPart]:
     """
     Coalesces consecutive thought parts and wraps them in tags.
     """
@@ -114,7 +112,9 @@ async def _transform_wrap_thoughts(
                     # Flush the buffer into a single wrapped part
                     full_thought = "".join(thought_buffer)
                     wrapped_thought = f"{start_tag}{full_thought}{end_tag}"
-                    parts_to_yield.append(GeminiPart(text=wrapped_thought, thought=True))
+                    parts_to_yield.append(
+                        GeminiPart(text=wrapped_thought, thought=True)
+                    )
                     thought_buffer = []  # Reset buffer
 
                 # Add the non-thought part to be yielded
@@ -149,9 +149,7 @@ def wrap_thoughts_in_gemini_response(
     """Transforms a GeminiResponse to wrap thought parts in the provided tags."""
     new_candidates = []
     for candidate in response.candidates:
-        transformed_parts = _coalesce_and_wrap_thoughts(
-            candidate.content.parts, tags
-        )
+        transformed_parts = _coalesce_and_wrap_thoughts(candidate.content.parts, tags)
         new_content = candidate.content.model_copy(update={"parts": transformed_parts})
         new_candidates.append(candidate.model_copy(update={"content": new_content}))
     return response.model_copy(update={"candidates": new_candidates})
@@ -161,29 +159,23 @@ def format_as_gemini_sse(chunk: GeminiResponse, **kwargs) -> str:
     """Formats a chunk into a Gemini-native SSE string."""
     return f"data: {chunk.model_dump_json(exclude_unset=True)}\n\n"
 
+
 def format_as_openai_sse(chunk: GeminiResponse, **context) -> str:
-    """Formats a chunk into an OpenAI-compatible SSE string."""
+    """
+    Formats a GeminiResponse chunk into an OpenAI-compatible SSE string.
+    This function now consistently uses the gemini_stream_chunk_to_openai
+    transformer for all cases to ensure consistency and simplify maintenance,
+    as recommended by code review.
+    """
     response_id = context["response_id"]
     model = context["model"]
 
-    # Use the existing transformer for complex cases like tool calls
-    if any(p.functionCall for c in chunk.candidates for p in c.content.parts) or any(c.finish_reason for c in chunk.candidates):
-        openai_chunk = gemini_stream_chunk_to_openai(chunk, model, response_id)
-        return f"data: {openai_chunk.model_dump_json(exclude_unset=True)}\n\n"
-
-    # Otherwise, construct a simple delta for text
-    text_content = "".join(p.text for c in chunk.candidates for p in c.content.parts if p.text)
-    delta = OpenAIDelta(content=text_content)
-    choice = OpenAIChatCompletionStreamChoice(index=0, delta=delta)
-    openai_chunk = OpenAIChatCompletionStreamResponse(
-        id=response_id,
-        object="chat.completion.chunk",
-        created=int(time.time()),
-        model=model,
-        choices=[choice],
-    )
+    # The transformer returns a dict; we must validate it into a Pydantic model
+    # before we can serialize it. This aligns with the non-streaming logic.
+    openai_chunk_dict = gemini_stream_chunk_to_openai(chunk, model, response_id)
+    openai_chunk = OpenAIChatCompletionStreamResponse.model_validate(openai_chunk_dict)
     return f"data: {openai_chunk.model_dump_json(exclude_unset=True)}\n\n"
- 
+
 
 # --- Pipeline Orchestrator ---
 
@@ -209,10 +201,7 @@ async def process_stream_for_client(
             if settings.DEBUG:
                 # Extract text content from the chunk for logging
                 text_content = "".join(
-                    p.text
-                    for c in chunk.candidates
-                    for p in c.content.parts
-                    if p.text
+                    p.text for c in chunk.candidates for p in c.content.parts if p.text
                 )
                 if text_content:
                     full_response_text_for_log.append(text_content)
@@ -221,7 +210,9 @@ async def process_stream_for_client(
 
         if settings.DEBUG and full_response_text_for_log:
             final_log_text = "".join(full_response_text_for_log)
-            logger.debug(format_log("Full Stream Content Sent to Client", final_log_text))
+            logger.debug(
+                format_log("Full Stream Content Sent to Client", final_log_text)
+            )
 
     except StreamParseError as e:
         logger.error(f"Error parsing stream from Google: {e.original_text}")
@@ -234,4 +225,3 @@ async def process_stream_for_client(
 
     if formatter_context.get("is_openai", False):
         yield "data: [DONE]\n\n"
-

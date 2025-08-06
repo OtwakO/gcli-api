@@ -1,6 +1,3 @@
-import traceback
-from typing import Coroutine
-
 from fastapi import Depends, HTTPException, Request
 
 from .auth import authenticate_user

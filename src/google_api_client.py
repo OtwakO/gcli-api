@@ -5,11 +5,8 @@ from typing import Dict, Any
 
 import httpx
 from fastapi import HTTPException
-from pydantic import ValidationError
 
 from .credential_manager import ManagedCredential
-from .constants import DEFAULT_SAFETY_SETTINGS
-from .models import GeminiRequest
 from .settings import settings
 from .utils import get_user_agent, create_redacted_payload, get_client_metadata
 from .logger import get_logger, format_log
@@ -17,7 +14,7 @@ from .logger import get_logger, format_log
 logger = get_logger(__name__)
 
 
-async def _get_user_project_id(managed_cred: ManagedCredential) -> str:
+async def _fetch_project_id(managed_cred: ManagedCredential) -> str:
     """Gets project ID for the given credential, using cache if available."""
     if managed_cred.project_id:
         return managed_cred.project_id
@@ -53,13 +50,12 @@ async def _get_user_project_id(managed_cred: ManagedCredential) -> str:
         raise HTTPException(status_code=500, detail="Failed to discover user project ID from Google API.")
 
 
-async def _onboard_user(managed_cred: ManagedCredential):
+async def _perform_onboarding(managed_cred: ManagedCredential, project_id: str):
     """Ensures the user associated with the credential is onboarded."""
     if managed_cred.is_onboarded:
         return
 
     creds = managed_cred.credential
-    project_id = managed_cred.project_id
 
     headers = {
         "Authorization": f"Bearer {creds.token}",
@@ -127,44 +123,45 @@ async def _onboard_user(managed_cred: ManagedCredential):
         )
         raise HTTPException(status_code=e.response.status_code, detail=f"Onboarding failed: {e.response.text}")
 
+async def prepare_credential(managed_cred: ManagedCredential) -> str:
+    """
+    Ensures the credential has a project ID and the user is onboarded.
+    Returns the project ID.
+    """
+    project_id = managed_cred.project_id
+    if not project_id:
+        project_id = await _fetch_project_id(managed_cred)
+    
+    if not managed_cred.is_onboarded:
+        await _perform_onboarding(managed_cred, project_id)
+        
+    return project_id
+
 
 async def send_gemini_request(
-    managed_cred: ManagedCredential, payload: dict, is_streaming: bool = False
+    managed_cred: ManagedCredential, target_url: str, payload: dict
 ) -> httpx.Response:
     """
-    Prepares and sends a request to the Google Gemini API, handling auth, project discovery, and onboarding.
+    Sends a prepared request to the Google Gemini API.
+    This function is responsible for the final HTTP call.
     """
     creds = managed_cred.credential
     if not creds or not creds.token:
         raise HTTPException(status_code=401, detail="Credential is missing a valid token.")
-
-    # Ensure project ID is known and user is onboarded
-    proj_id = await _get_user_project_id(managed_cred)
-    await _onboard_user(managed_cred)
-
-    action = "streamGenerateContent" if is_streaming else "generateContent"
-    target_url = f"{settings.CODE_ASSIST_ENDPOINT}/v1internal:{action}"
-    if is_streaming:
-        target_url += "?alt=sse"
 
     request_headers = {
         "Authorization": f"Bearer {creds.token}",
         "Content-Type": "application/json",
         "User-Agent": get_user_agent(),
     }
-
-    final_payload = {
-        "model": payload.get("model"),
-        "project": proj_id,
-        "request": payload.get("request", {}),
-    }
-    final_post_data = json.dumps(final_payload, ensure_ascii=False)
+    
+    final_post_data = json.dumps(payload, ensure_ascii=False)
 
     if settings.DEBUG:
         log_payload = (
-            create_redacted_payload(final_payload)
+            create_redacted_payload(payload)
             if settings.DEBUG_REDACT_LOGS
-            else final_payload
+            else payload
         )
         logger.debug(
             format_log(
@@ -183,10 +180,9 @@ async def send_gemini_request(
     except httpx.HTTPStatusError as e:
         error_body = e.response.text
         try:
-            # Try to parse and format the error as JSON for readability
             error_body = e.response.json()
         except json.JSONDecodeError:
-            pass  # Keep as raw text if not JSON
+            pass
         
         logger.error(format_log(
             f"Upstream API Error ({e.response.status_code})",
@@ -197,7 +193,8 @@ async def send_gemini_request(
 
     if settings.DEBUG:
         log_data = {"status_code": response.status_code, "headers": dict(response.headers)}
-        if not is_streaming:
+        # For non-streaming, log the body
+        if "alt=sse" not in target_url:
             try:
                 log_data["body"] = response.json()
             except json.JSONDecodeError:

@@ -1,4 +1,5 @@
 import base64
+import binascii
 
 from fastapi import Depends, HTTPException, Request
 
@@ -32,7 +33,7 @@ def authenticate_user(request: Request):
             username, password = decoded.split(":", 1)
             if password == settings.GEMINI_AUTH_PASSWORD:
                 return username
-        except Exception:
+        except (binascii.Error, ValueError):
             pass
 
     raise HTTPException(

@@ -47,7 +47,7 @@ class Settings(BaseSettings):
 
     # --- File Paths ---
     PERSISTENT_STORAGE_PATH: Path = Field(
-        default_factory=lambda: Path(__file__).parent,
+        default_factory=lambda: Path(__file__).parent.parent / "credentials",
         description="Base path for storing persistent data, like credential files.",
     )
     CREDENTIALS_JSON_LIST: str = Field(

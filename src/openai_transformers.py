@@ -1,15 +1,6 @@
 import json
 import time
 import uuid
-from typing import Any, Dict
-
-from .constants import DEFAULT_SAFETY_SETTINGS
-from .models import OpenAIChatCompletionRequest, GeminiResponse
-
-
-import json
-import time
-import uuid
 from typing import Any, Dict, List, Optional
 
 from .constants import DEFAULT_SAFETY_SETTINGS
@@ -18,7 +9,7 @@ from .logger import get_logger
 
 logger = get_logger(__name__)
 
-def _transform_message_part(part: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def _transform_message_part(part: Dict[str, Any], message_index: int) -> Optional[Dict[str, Any]]:
     """Transforms a single part of an OpenAI message content."""
     part_type = part.get("type")
     if part_type == "text":
@@ -26,7 +17,7 @@ def _transform_message_part(part: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     elif part_type == "image_url":
         image_url = part.get("image_url", {}).get("url")
         if not image_url or ";base64," not in image_url:
-            logger.warning(f"Skipping invalid or non-base64 image_url part: {part}")
+            logger.warning(f"Skipping invalid or non-base64 image_url part in message {message_index}: {part}")
             return None
         try:
             # Format: data:image/jpeg;base64,LzlqLzRBQ...            
@@ -34,14 +25,14 @@ def _transform_message_part(part: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             mime_type = header.split(":")[1].split(";")[0]
             return {"inlineData": {"mimeType": mime_type, "data": base64_data}}
         except (ValueError, IndexError) as e:
-            logger.warning(f"Could not parse image_url: {image_url}. Error: {e}")
+            logger.warning(f"Could not parse image_url in message {message_index}: {image_url}. Error: {e}")
             return None
     return None
 
 def _transform_messages(messages: List[OpenAIChatMessage]) -> List[Dict[str, Any]]:
     """Transforms a list of OpenAI messages to Gemini's content format."""
     contents = []
-    for message in messages:
+    for i, message in enumerate(messages):
         role = "model" if message.role == "assistant" else "tool" if message.role == "tool" else "user"
         
         parts = []
@@ -54,7 +45,7 @@ def _transform_messages(messages: List[OpenAIChatMessage]) -> List[Dict[str, Any
             })
         elif isinstance(message.content, list):
             for part in message.content:
-                transformed_part = _transform_message_part(part)
+                transformed_part = _transform_message_part(part, i)
                 if transformed_part:
                     parts.append(transformed_part)
         elif message.content is not None:
@@ -169,47 +160,59 @@ def openai_request_to_gemini(req: OpenAIChatCompletionRequest) -> Dict[str, Any]
     return payload
 
 
-def gemini_response_to_openai(
-    gemini_response: GeminiResponse, model: str
-) -> Dict[str, Any]:
-    choices = []
-    for candidate in gemini_response.candidates:
-        parts = candidate.content.parts
-        
-        tool_calls = []
-        content_text = None
+def _gemini_candidate_to_openai_choice(candidate, is_streaming: bool = False) -> Dict[str, Any]:
+    """Transforms a single Gemini candidate into an OpenAI choice dictionary."""
+    parts = candidate.content.parts
+    tool_calls = []
+    content_text = None
 
-        for part in parts:
-            if part.functionCall:
-                fc = part.functionCall
-                tool_calls.append(
-                    {
-                        "id": fc.name,
-                        "type": "function",
-                        "function": {
-                            "name": fc.name,
-                            "arguments": json.dumps(fc.args),
-                        },
-                    }
-                )
-            if part.text:
-                content_text = part.text
+    for part in parts:
+        if part.functionCall:
+            fc = part.functionCall
+            tool_call_data = {
+                "id": fc.name,
+                "type": "function",
+                "function": {
+                    "name": fc.name,
+                    "arguments": json.dumps(fc.args),
+                },
+            }
+            if is_streaming:
+                tool_call_data["index"] = 0  # Add index for streaming tool calls
+            tool_calls.append(tool_call_data)
+        if part.text:
+            content_text = part.text
 
-        message = {
-            "role": "assistant",
-            "content": content_text,
+    if is_streaming:
+        delta = {}
+        if content_text:
+            delta["content"] = content_text
+        if tool_calls:
+            delta["tool_calls"] = tool_calls
+            delta["role"] = "assistant"
+        return {
+            "index": candidate.index,
+            "delta": delta,
+            "finish_reason": _map_finish_reason(candidate.finish_reason),
         }
+    else:
+        message = {"role": "assistant", "content": content_text}
         if tool_calls:
             message["tool_calls"] = tool_calls
             message["content"] = None
+        return {
+            "index": candidate.index,
+            "message": message,
+            "finish_reason": _map_finish_reason(candidate.finish_reason),
+        }
 
-        choices.append(
-            {
-                "index": candidate.index,
-                "message": message,
-                "finish_reason": _map_finish_reason(candidate.finish_reason),
-            }
-        )
+def gemini_response_to_openai(
+    gemini_response: GeminiResponse, model: str
+) -> Dict[str, Any]:
+    choices = [
+        _gemini_candidate_to_openai_choice(c, is_streaming=False)
+        for c in gemini_response.candidates
+    ]
     return {
         "id": "chatcmpl-" + str(uuid.uuid4()),
         "object": "chat.completion",
@@ -222,44 +225,10 @@ def gemini_response_to_openai(
 def gemini_stream_chunk_to_openai(
     gemini_chunk: GeminiResponse, model: str, response_id: str
 ) -> Dict[str, Any]:
-    choices = []
-    for candidate in gemini_chunk.candidates:
-        delta = {}
-        parts = candidate.content.parts
-        
-        tool_calls = []
-        content_text = None
-
-        for part in parts:
-            if part.text:
-                content_text = part.text
-            elif part.functionCall:
-                fc = part.functionCall
-                tool_call_chunk = {
-                    "index": 0,
-                    "id": fc.name,
-                    "type": "function",
-                    "function": {
-                        "name": fc.name,
-                        "arguments": json.dumps(fc.args),
-                    },
-                }
-                tool_calls.append(tool_call_chunk)
-        
-        if content_text:
-            delta["content"] = content_text
-        
-        if tool_calls:
-            delta["tool_calls"] = tool_calls
-            delta["role"] = "assistant"
-
-        choices.append(
-            {
-                "index": candidate.index,
-                "delta": delta,
-                "finish_reason": _map_finish_reason(candidate.finish_reason),
-            }
-        )
+    choices = [
+        _gemini_candidate_to_openai_choice(c, is_streaming=True)
+        for c in gemini_chunk.candidates
+    ]
     return {
         "id": response_id,
         "object": "chat.completion.chunk",

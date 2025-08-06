@@ -1,5 +1,6 @@
 # Credential files - should never be committed
 **/oauth_creds*
+**/credentials/
 
 # Environment configuration
 .env

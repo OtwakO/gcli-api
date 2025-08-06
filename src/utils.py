@@ -3,7 +3,14 @@ import copy
 from typing import Any, Dict
 
 from .constants import CLI_VERSION
+from .settings import settings
 
+def build_gemini_url(action: str) -> str:
+    """Constructs the full URL for a given Gemini API action."""
+    url = f"{settings.CODE_ASSIST_ENDPOINT}/v1internal:{action}"
+    if "stream" in action.lower():
+        url += "?alt=sse"
+    return url
 
 def get_user_agent():
     """Generate User-Agent string matching gemini-cli format."""

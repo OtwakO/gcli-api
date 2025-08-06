@@ -1,18 +1,14 @@
 import asyncio
 import json
-import logging
 import os
 import re
 
 import httpx
-import uvicorn
 
-# Assuming constants, settings, utils are in the same directory
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from .ui import create_page
-from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 
 from .constants import SCOPES

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import traceback
 from contextlib import asynccontextmanager
@@ -8,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from .credential_manager import credential_manager
 from .gemini_routes import router as gemini_router
-from .logger import format_log, get_logger, setup_logging
+from .logger import format_log, get_logger
 from .openai_routes import router as openai_router
 from .settings import settings
 from .ui import create_page
@@ -33,10 +34,23 @@ class PrettyJSONResponse(Response):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Ensure the persistent storage directory exists
+    try:
+        settings.PERSISTENT_STORAGE_PATH.mkdir(parents=True, exist_ok=True)
+        logger.info(
+            f"Ensured credential storage directory exists at: {settings.PERSISTENT_STORAGE_PATH}"
+        )
+    except Exception as e:
+        logger.error(
+            f"Could not create persistent storage directory: {e}", exc_info=True
+        )
+
     if credential_manager._credentials:
         logger.info(
             f"Proxy is running with {len(credential_manager._credentials)} credential(s)."
         )
+        # Asynchronously warm up credentials without blocking startup
+        asyncio.create_task(credential_manager.warm_up_credentials())
     else:
         logger.warning(
             "Proxy is running without any credentials. "
@@ -46,11 +60,11 @@ async def lifespan(app: FastAPI):
     if settings.GEMINI_AUTH_PASSWORD == "123456":
         if not settings.DEBUG:
             logger.critical(
-                'CRITICAL SECURITY RISK: The default authentication password is being used in a non-DEBUG environment. Please set a strong GEMINI_AUTH_PASSWORD immediately.'
+                "CRITICAL SECURITY RISK: The default authentication password is being used in a non-DEBUG environment. Please set a strong GEMINI_AUTH_PASSWORD immediately."
             )
         else:
             logger.warning(
-                'Security risk: The default authentication password is being used. Please set a strong GEMINI_AUTH_PASSWORD in your environment.'
+                "Security risk: The default authentication password is being used. Please set a strong GEMINI_AUTH_PASSWORD in your environment."
             )
     yield
 
