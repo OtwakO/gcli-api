@@ -144,7 +144,14 @@ All API endpoints require a Bearer token. Use the password you set for `GEMINI_A
 
 This endpoint mimics the OpenAI API.
 
--   **Endpoint**: `POST /v1/chat/completions`
+-   **Endpoints**:
+    -   `POST /v1/chat/completions`
+    -   `POST /v1/embeddings`
+    -   `GET /v1/models`
+
+-   **Limitations**:
+    -   The `usage` field in responses from the `/v1/embeddings` endpoint is not populated with actual token counts. `prompt_tokens` and `total_tokens` will always be `0`.
+
 -   **Example Request (with Tool Calling)**:
 
     ```json

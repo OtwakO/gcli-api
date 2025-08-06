@@ -183,6 +183,15 @@ async def oauth2callback(request: Request):
             <p class="footer">You can now close this window and stop the script (Ctrl+C).</p>
         """
         return create_page("Success", content)
+    except httpx.HTTPStatusError as e:
+        logger.error(f"HTTP error during OAuth callback: {e}", exc_info=True)
+        content = f"""
+        <h1>Error</h1>
+        <p>An HTTP error occurred while communicating with Google's servers. Please see the details below:</p>
+        <div class="code-block"><code>{e.response.text}</code></div>
+        <a href="/" class="btn">Try Again</a>
+        """
+        return create_page("Error", content)
     except Exception as e:
         logger.error(f"Error during OAuth callback: {e}", exc_info=True)
         content = f"""

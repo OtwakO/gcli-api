@@ -4,10 +4,61 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from .constants import DEFAULT_SAFETY_SETTINGS
-from .models import OpenAIChatCompletionRequest, GeminiResponse, OpenAIChatMessage
+from .models import (
+    OpenAIChatCompletionRequest,
+    GeminiResponse,
+    OpenAIChatMessage,
+    OpenAIEmbeddingRequest,
+    EmbedContentResponse,
+    OpenAIEmbeddingResponse,
+    OpenAIEmbeddingData,
+    OpenAIUsage,
+)
 from .logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def openai_embedding_request_to_gemini(
+    req: OpenAIEmbeddingRequest,
+) -> Dict[str, Any]:
+    """Converts an OpenAI Embedding request to a Gemini API request payload."""
+    # The Gemini API expects a single content object.
+    # If the input is a list, we can only process the first element for a single embedding.
+    # This is a simplification; a more complex implementation could batch requests.
+    text_input = ""
+    if isinstance(req.input, str):
+        text_input = req.input
+    elif isinstance(req.input, list) and len(req.input) > 0:
+        # For simplicity, we'll take the first item if it's a list of strings.
+        # The Gemini API's embedContent takes a single content blob.
+        if isinstance(req.input[0], str):
+            text_input = req.input[0]
+        else:
+            # Handling for token arrays is not directly supported in this simplified flow.
+            logger.warning("List of token arrays as input is not supported.")
+
+    return {"content": {"parts": [{"text": text_input}]}}
+
+
+def gemini_embedding_response_to_openai(
+    gemini_response: EmbedContentResponse, model: str
+) -> OpenAIEmbeddingResponse:
+    """Transforms a Gemini embedding response into an OpenAI-compatible one."""
+    embedding_data = OpenAIEmbeddingData(
+        embedding=gemini_response.embedding.values, index=0
+    )
+
+    # Placeholder for token count, as the Gemini SDK doesn't directly provide it
+    # in the embedding response. A separate countTokens call would be needed for accuracy.
+    usage = OpenAIUsage(prompt_tokens=0, total_tokens=0)
+
+    return OpenAIEmbeddingResponse(
+        data=[embedding_data],
+        model=model,
+        usage=usage,
+    )
+
 
 def _transform_message_part(part: Dict[str, Any], message_index: int) -> Optional[Dict[str, Any]]:
     """Transforms a single part of an OpenAI message content."""
@@ -20,7 +71,7 @@ def _transform_message_part(part: Dict[str, Any], message_index: int) -> Optiona
             logger.warning(f"Skipping invalid or non-base64 image_url part in message {message_index}: {part}")
             return None
         try:
-            # Format: data:image/jpeg;base64,LzlqLzRBQ...            
+            # Format: data:image/jpeg;base64,LzlqLzRBQ...
             header, base64_data = image_url.split(",", 1)
             mime_type = header.split(":")[1].split(";")[0]
             return {"inlineData": {"mimeType": mime_type, "data": base64_data}}

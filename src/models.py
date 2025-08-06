@@ -66,6 +66,34 @@ class OpenAIChatCompletionStreamResponse(BaseModel):
     model: str
     choices: List[OpenAIChatCompletionStreamChoice]
 
+
+# OpenAI Embedding Models
+class OpenAIEmbeddingRequest(BaseModel):
+    input: Union[str, List[str], List[int], List[List[int]]]
+    model: str
+    encoding_format: Optional[str] = "float"
+    dimensions: Optional[int] = None
+    user: Optional[str] = None
+
+
+class OpenAIEmbeddingData(BaseModel):
+    object: str = "embedding"
+    embedding: List[float]
+    index: int
+
+
+class OpenAIUsage(BaseModel):
+    prompt_tokens: int
+    total_tokens: int
+
+
+class OpenAIEmbeddingResponse(BaseModel):
+    object: str = "list"
+    data: List[OpenAIEmbeddingData]
+    model: str
+    usage: OpenAIUsage
+
+
 # Gemini Models
 class GeminiFunctionCall(BaseModel):
     name: str
@@ -142,3 +170,7 @@ class ContentEmbedding(BaseModel):
 
 class EmbedContentResponse(BaseModel):
     embedding: ContentEmbedding
+
+
+class BatchEmbedContentResponse(BaseModel):
+    embeddings: List[ContentEmbedding]

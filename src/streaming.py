@@ -220,7 +220,7 @@ async def process_stream_for_client(
         yield f"data: {json.dumps(error_payload)}\n\n"
     except Exception as e:
         logger.error(f"Generic stream processing error: {e}", exc_info=True)
-        error_payload = {"error": {"message": str(e)}}
+        error_payload = {"error": {"message": f"An unexpected error occurred during streaming: {e}"}}
         yield f"data: {json.dumps(error_payload)}\n\n"
 
     if formatter_context.get("is_openai", False):

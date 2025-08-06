@@ -69,7 +69,11 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(lifespan=lifespan, default_response_class=PrettyJSONResponse)
+app = FastAPI(
+    lifespan=lifespan,
+    default_response_class=PrettyJSONResponse,
+    debug=True,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -107,8 +111,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
     """Handles any other unexpected exceptions to prevent crashes."""
-    logging.error(f"Unhandled exception for request {request.method} {request.url}:")
-    logging.error(traceback.format_exc())
+    logging.error(f"Unhandled exception for request {request.method} {request.url}:", exc_info=True)
     return JSONResponse(
         status_code=500,
         content={
