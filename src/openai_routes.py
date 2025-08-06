@@ -22,6 +22,8 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
+from .response_handler import process_upstream_response
+
 @router.post("/v1/chat/completions", response_model=OpenAIChatCompletionResponse)
 async def openai_chat_completions(
     request: OpenAIChatCompletionRequest,
@@ -47,37 +49,19 @@ async def openai_chat_completions(
         managed_cred, final_payload, is_streaming=request.stream
     )
 
-    if request.stream:
-        formatter_context = {
-            "response_id": f"chatcmpl-{uuid.uuid4()}",
-            "model": request.model,
-            "is_openai": True,
-        }
-        stream_processor = process_stream_for_client(
-            upstream_response, 
-            format_as_openai_sse,
-            formatter_context,
-        )
-        return StreamingResponse(stream_processor, media_type="text/event-stream")
-    else:
-        gemini_response = GeminiResponse.model_validate(upstream_response.json()["response"])
+    formatter_context = {
+        "response_id": f"chatcmpl-{uuid.uuid4()}",
+        "model": request.model,
+        "is_openai": True,
+    }
 
-        if settings.THOUGHT_WRAPPER_TAGS and len(settings.THOUGHT_WRAPPER_TAGS) == 2:
-            gemini_response = wrap_thoughts_in_gemini_response(
-                gemini_response, settings.THOUGHT_WRAPPER_TAGS
-            )
-
-        openai_response_dict = gemini_response_to_openai(gemini_response, request.model)
-        openai_response = OpenAIChatCompletionResponse.model_validate(openai_response_dict)
-
-        if settings.DEBUG:
-            logger.debug(format_log(
-                "Sending to Client (Non-Streaming)", 
-                openai_response.model_dump(exclude_unset=True),
-                is_json=True
-            ))
-
-        return openai_response
+    return await process_upstream_response(
+        upstream_response=upstream_response,
+        is_streaming=request.stream,
+        response_formatter=format_as_openai_sse,
+        formatter_context=formatter_context,
+        openai_request=request,
+    )
 
 
 @router.get("/v1/models")

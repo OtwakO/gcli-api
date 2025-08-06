@@ -29,6 +29,8 @@ async def list_models(_: str = Depends(authenticate_user)):
         media_type="application/json; charset=utf-8",
     )
 
+from .response_handler import process_upstream_response
+
 @router.api_route("/{full_path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def gemini_proxy(
     request: Request,
@@ -70,28 +72,8 @@ async def gemini_proxy(
 
     upstream_response = await send_gemini_request(managed_cred, gemini_payload, is_streaming=is_streaming)
 
-    if is_streaming:
-        stream_processor = process_stream_for_client(upstream_response, format_as_gemini_sse, {})
-        return StreamingResponse(stream_processor, media_type="text/event-stream")
-    else:
-        upstream_body = upstream_response.json()
-        gemini_response = GeminiResponse.model_validate(upstream_body["response"])
-
-        if settings.THOUGHT_WRAPPER_TAGS and len(settings.THOUGHT_WRAPPER_TAGS) == 2:
-            gemini_response = wrap_thoughts_in_gemini_response(
-                gemini_response, settings.THOUGHT_WRAPPER_TAGS
-            )
-
-        response_data = gemini_response.model_dump(exclude_unset=True)
-
-        if settings.DEBUG:
-            logger.debug(format_log(
-                "Sending to Client (Non-Streaming)", 
-                response_data, 
-                is_json=True
-            ))
-        return Response(
-            content=json.dumps(response_data, ensure_ascii=False),
-            status_code=200,
-            media_type="application/json; charset=utf-8",
-        )
+    return await process_upstream_response(
+        upstream_response=upstream_response,
+        is_streaming=is_streaming,
+        response_formatter=format_as_gemini_sse,
+    )

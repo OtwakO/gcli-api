@@ -5,8 +5,8 @@
 .env
 
 # Python
-__pycache__/
-*.py[cod]
+**/__pycache__/
+**/.py[cod]
 *$py.class
 *.so
 .Python
@@ -52,7 +52,6 @@ coverage.xml
 .pytest_cache/
 
 # Virtual environments
-.env
 .venv
 env/
 venv/

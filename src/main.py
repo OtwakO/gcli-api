@@ -2,7 +2,7 @@ import logging
 import traceback
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -44,9 +44,14 @@ async def lifespan(app: FastAPI):
             "or configure the CREDENTIALS_JSON_LIST environment variable."
         )
     if settings.GEMINI_AUTH_PASSWORD == "123456":
-        logger.warning(
-            'Security risk: The default authentication password is being used. Please set a strong GEMINI_AUTH_PASSWORD in your environment.'
-        )
+        if not settings.DEBUG:
+            logger.critical(
+                'CRITICAL SECURITY RISK: The default authentication password is being used in a non-DEBUG environment. Please set a strong GEMINI_AUTH_PASSWORD immediately.'
+            )
+        else:
+            logger.warning(
+                'Security risk: The default authentication password is being used. Please set a strong GEMINI_AUTH_PASSWORD in your environment.'
+            )
     yield
 
 
@@ -74,16 +79,6 @@ async def debug_logging_middleware(request: Request, call_next):
 
     response = await call_next(request)
     return response
-
-
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"error": {"message": exc.detail, "type": "api_error"}},
-    )
-
-
 
 
 @app.exception_handler(HTTPException)

@@ -77,8 +77,10 @@ class CredentialManager:
                 with file_path.open("r", encoding="utf-8") as f:
                     cred_info = json.load(f)
                     self._add_credential_from_info(cred_info, str(file_path))
+            except (json.JSONDecodeError, IOError) as e:
+                logger.warning(f"Could not load or parse credential file {file_path}: {e}")
             except Exception as e:
-                logger.warning(f"Could not load credential file {file_path}: {e}")
+                logger.error(f"An unexpected error occurred while loading credential file {file_path}: {e}")
 
     def _add_credential_from_info(self, cred_info: dict, source: str = "env"):
         if "refresh_token" not in cred_info:

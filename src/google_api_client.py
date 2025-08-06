@@ -1,5 +1,6 @@
 import asyncio
 import json
+import random
 from typing import Dict, Any
 
 import httpx
@@ -97,8 +98,10 @@ async def _onboard_user(managed_cred: ManagedCredential):
             }
 
             logger.info(f"Onboarding user {managed_cred.user_email} for project {project_id}...")
-            # This is a long-running operation (LRO), so we poll.
-            for _ in range(5):  # Poll up to 5 times (20 seconds total)
+            # This is a long-running operation (LRO), so we poll with exponential backoff.
+            max_attempts = 5
+            base_delay = 1.0  # seconds
+            for attempt in range(max_attempts):
                 onboard_resp = await client.post(
                     f"{settings.CODE_ASSIST_ENDPOINT}/v1internal:onboardUser",
                     data=json.dumps(onboard_req_payload, ensure_ascii=False),
@@ -110,9 +113,13 @@ async def _onboard_user(managed_cred: ManagedCredential):
                     managed_cred.is_onboarded = True
                     logger.info(f"Successfully onboarded user {managed_cred.user_email}.")
                     return
-                await asyncio.sleep(4)
+                
+                # Exponential backoff with jitter
+                delay = (base_delay * 2 ** attempt) + (random.uniform(0, 1))
+                logger.info(f"Onboarding not complete, retrying in {delay:.2f} seconds...")
+                await asyncio.sleep(delay)
             
-            logger.warning(f"Onboarding LRO for {managed_cred.user_email} did not complete in time.")
+            logger.warning(f"Onboarding LRO for {managed_cred.user_email} did not complete after {max_attempts} attempts.")
 
     except httpx.HTTPStatusError as e:
         logger.error(
@@ -200,33 +207,3 @@ async def send_gemini_request(
     return response
 
 
-def build_gemini_payload_from_openai(openai_payload: dict) -> dict:
-    model = openai_payload.get("model")
-    safety_settings = openai_payload.get("safetySettings", DEFAULT_SAFETY_SETTINGS)
-    
-    request_data = {
-        k: v
-        for k, v in {
-            "contents": openai_payload.get("contents"),
-            "systemInstruction": openai_payload.get("systemInstruction"),
-            "cachedContent": openai_payload.get("cachedContent"),
-            "tools": openai_payload.get("tools"),
-            "toolConfig": openai_payload.get("toolConfig"),
-            "safetySettings": safety_settings,
-            "generationConfig": openai_payload.get("generationConfig", {}),
-        }.items()
-        if v is not None
-    }
-    
-    return {"model": model, "request": request_data}
-
-
-def build_gemini_payload_from_native(
-    native_request: dict, model_from_path: str
-) -> dict:
-    validated_request = GeminiRequest.model_validate(native_request)
-    
-    if "safetySettings" not in validated_request.model_dump(exclude_unset=True):
-        validated_request.safetySettings = DEFAULT_SAFETY_SETTINGS
-        
-    return {"model": model_from_path, "request": validated_request.model_dump(exclude_unset=True)}
