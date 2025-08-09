@@ -1,71 +1,86 @@
 [
     {
-        "name": "models/gemini-2.5-pro-preview-05-06",
+        "name": "gemini-2.5-pro-preview-05-06",
         "version": "001",
         "displayName": "Gemini 2.5 Pro Preview 05-06",
         "description": "Preview version of Gemini 2.5 Pro from May 6th",
         "inputTokenLimit": 1048576,
-        "outputTokenLimit": 8192,
-        "supportedGenerationMethods": ["generateContent", "streamGenerateContent"],
+        "outputTokenLimit": 65536,
+        "supportedGenerationMethods": [
+            "generateContent",
+            "streamGenerateContent"
+        ],
         "temperature": 1.0,
         "maxTemperature": 2.0,
         "topP": 0.95,
         "topK": 64
     },
     {
-        "name": "models/gemini-2.5-pro-preview-06-05",
+        "name": "gemini-2.5-pro-preview-06-05",
         "version": "001",
         "displayName": "Gemini 2.5 Pro Preview 06-05",
         "description": "Preview version of Gemini 2.5 Pro from June 5th",
         "inputTokenLimit": 1048576,
-        "outputTokenLimit": 8192,
-        "supportedGenerationMethods": ["generateContent", "streamGenerateContent"],
+        "outputTokenLimit": 65536,
+        "supportedGenerationMethods": [
+            "generateContent",
+            "streamGenerateContent"
+        ],
         "temperature": 1.0,
         "maxTemperature": 2.0,
         "topP": 0.95,
         "topK": 64
     },
     {
-        "name": "models/gemini-2.5-pro",
+        "name": "gemini-2.5-pro",
         "version": "001",
         "displayName": "Gemini 2.5 Pro",
         "description": "Advanced multimodal model with enhanced capabilities",
         "inputTokenLimit": 1048576,
-        "outputTokenLimit": 8192,
-        "supportedGenerationMethods": ["generateContent", "streamGenerateContent"],
+        "outputTokenLimit": 65536,
+        "supportedGenerationMethods": [
+            "generateContent",
+            "streamGenerateContent"
+        ],
         "temperature": 1.0,
         "maxTemperature": 2.0,
         "topP": 0.95,
         "topK": 64
     },
     {
-        "name": "models/gemini-2.5-flash-preview-05-20",
+        "name": "gemini-2.5-flash-preview-05-20",
         "version": "001",
         "displayName": "Gemini 2.5 Flash Preview 05-20",
         "description": "Preview version of Gemini 2.5 Flash from May 20th",
         "inputTokenLimit": 1048576,
-        "outputTokenLimit": 8192,
-        "supportedGenerationMethods": ["generateContent", "streamGenerateContent"],
+        "outputTokenLimit": 65536,
+        "supportedGenerationMethods": [
+            "generateContent",
+            "streamGenerateContent"
+        ],
         "temperature": 1.0,
         "maxTemperature": 2.0,
         "topP": 0.95,
         "topK": 64
     },
     {
-        "name": "models/gemini-2.5-flash",
+        "name": "gemini-2.5-flash",
         "version": "001",
         "displayName": "Gemini 2.5 Flash",
         "description": "Fast and efficient multimodal model with latest improvements",
         "inputTokenLimit": 1048576,
-        "outputTokenLimit": 8192,
-        "supportedGenerationMethods": ["generateContent", "streamGenerateContent"],
+        "outputTokenLimit": 65536,
+        "supportedGenerationMethods": [
+            "generateContent",
+            "streamGenerateContent"
+        ],
         "temperature": 1.0,
         "maxTemperature": 2.0,
         "topP": 0.95,
         "topK": 64
     },
     {
-        "name": "models/gemini-embedding-001",
+        "name": "gemini-embedding-001",
         "version": "001",
         "displayName": "Gemini Embedding 001",
         "description": "Text embedding model for semantic similarity and search",

@@ -246,6 +246,7 @@ SCRIPT = """
 </script>
 """
 
+
 def create_page(title: str, body_content: str) -> HTMLResponse:
     """Creates a full HTML page with consistent styling and scripts."""
     return HTMLResponse(f"""

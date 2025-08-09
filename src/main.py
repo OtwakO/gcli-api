@@ -1,18 +1,18 @@
 import asyncio
 import logging
-import traceback
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .credential_manager import credential_manager
-from .gemini_routes import router as gemini_router
-from .logger import format_log, get_logger
-from .openai_routes import router as openai_router
-from .settings import settings
-from .ui import create_page
+from .api.claude_routes import router as claude_router
+from .core.credential_manager import credential_manager
+from .api.gemini_routes import router as gemini_router
+from .utils.logger import format_log, get_logger
+from .api.openai_routes import router as openai_router
+from .core.settings import settings
+from .utils.ui import create_page
 
 logger = get_logger(__name__)
 
@@ -71,7 +71,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     lifespan=lifespan,
-    default_response_class=PrettyJSONResponse,
     debug=True,
 )
 
@@ -111,7 +110,10 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
     """Handles any other unexpected exceptions to prevent crashes."""
-    logging.error(f"Unhandled exception for request {request.method} {request.url}:", exc_info=True)
+    logging.error(
+        f"Unhandled exception for request {request.method} {request.url}:",
+        exc_info=True,
+    )
     return JSONResponse(
         status_code=500,
         content={
@@ -124,7 +126,7 @@ async def generic_exception_handler(request: Request, exc: Exception):
     )
 
 
-@app.get("/")
+@app.get("/", response_class=PrettyJSONResponse)
 async def root(request: Request):
     num_credentials = len(credential_manager._credentials)
     # Correctly determine the base URL, especially behind a proxy
@@ -158,10 +160,11 @@ async def root(request: Request):
     return create_page("Gemini Proxy Status", content)
 
 
-@app.get("/health")
+@app.get("/health", response_class=PrettyJSONResponse)
 def health_check():
     return {"status": "ok"}
 
 
 app.include_router(openai_router)
+app.include_router(claude_router)
 app.include_router(gemini_router, prefix="/v1beta")

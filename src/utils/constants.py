@@ -1,6 +1,7 @@
 """
 Constants used across the application.
 """
+
 import json
 from pathlib import Path
 
@@ -27,14 +28,16 @@ DEFAULT_SAFETY_SETTINGS = [
     {"category": "HARM_CATEGORY_CIVIC_INTEGRITY", "threshold": "BLOCK_NONE"},
 ]
 
+
 def _load_models():
     try:
-        models_path = Path(__file__).parent / "models.json"
+        models_path = Path(__file__).parent.parent / "models.json"
         with models_path.open("r", encoding="utf-8") as f:
             return json.load(f)
     except (IOError, json.JSONDecodeError) as e:
         logger.error(f"Error loading models.json: {e}")
         return []
+
 
 # Supported Models (for /v1beta/models endpoint)
 SUPPORTED_MODELS = _load_models()

@@ -8,13 +8,13 @@ import httpx
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from .ui import create_page
+from ..utils.ui import create_page
 from google_auth_oauthlib.flow import Flow
 
-from .constants import SCOPES
-from .settings import settings
-from .utils import get_client_metadata, get_user_agent
-from .logger import setup_logging, get_logger, format_log
+from ..utils.constants import SCOPES
+from ..core.settings import settings
+from ..utils.utils import get_client_metadata, get_user_agent
+from ..utils.logger import setup_logging, get_logger, format_log
 
 # --- Logging Configuration ---
 setup_logging()
@@ -29,8 +29,6 @@ app = FastAPI()
 auth_flow_state = {"flow": None}
 
 
-
-
 def sanitize_for_filename(text: str) -> str:
     """Creates a safe filename component from a string."""
     if not text:
@@ -41,7 +39,7 @@ def sanitize_for_filename(text: str) -> str:
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """Serves the main page with the login form."""    
+    """Serves the main page with the login form."""
     content = """
         <h1>Gemini Credential Generator</h1>
         <p>
@@ -125,7 +123,11 @@ async def oauth2callback(request: Request):
                 }
 
                 logger.debug(
-                    format_log("Sending project discovery request", discovery_payload, is_json=True)
+                    format_log(
+                        "Sending project discovery request",
+                        discovery_payload,
+                        is_json=True,
+                    )
                 )
 
                 resp = await client.post(
@@ -137,7 +139,11 @@ async def oauth2callback(request: Request):
                 try:
                     response_json = resp.json()
                     logger.debug(
-                        format_log(f"Received project discovery response ({resp.status_code})", response_json, is_json=True)
+                        format_log(
+                            f"Received project discovery response ({resp.status_code})",
+                            response_json,
+                            is_json=True,
+                        )
                     )
                     resp.raise_for_status()
                     final_project_id = response_json.get(
@@ -153,7 +159,6 @@ async def oauth2callback(request: Request):
                 # Use the project ID passed in the state
                 final_project_id = returned_state
                 logger.info(f"Using specified project ID: {final_project_id}")
-
 
         creds_data = {
             "client_id": settings.CLIENT_ID,

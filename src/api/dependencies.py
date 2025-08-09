@@ -1,8 +1,8 @@
 from fastapi import Depends, HTTPException, Request
 import json
-from .auth import authenticate_user
-from .credential_manager import ManagedCredential, get_rotating_credential
-from .logger import get_logger
+from ..core.auth import authenticate_user
+from ..core.credential_manager import ManagedCredential, get_rotating_credential
+from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -30,7 +30,7 @@ async def get_validated_credential(
     if not managed_cred:
         logger.error("No managed credential was returned from the credential manager.")
         raise HTTPException(
-            status_code=503, 
-            detail="No valid credentials available in the rotation pool."
+            status_code=503,
+            detail="No valid credentials available in the rotation pool.",
         )
     return managed_cred

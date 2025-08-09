@@ -3,7 +3,8 @@ import json
 from rich.logging import RichHandler
 from typing import Any
 
-from .settings import settings
+from ..core.settings import settings
+
 
 def setup_logging():
     """
@@ -11,11 +12,11 @@ def setup_logging():
     pretty console output.
     """
     log_level = "DEBUG" if settings.DEBUG else "INFO"
-    
+
     # Configure the root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
-    
+
     # Remove any existing handlers to avoid duplicates
     if root_logger.hasHandlers():
         root_logger.handlers.clear()
@@ -28,7 +29,7 @@ def setup_logging():
         show_path=False,
         log_time_format="[%Y-%m-%d %H:%M:%S]",
     )
-    
+
     # Create a formatter and set it for the handler
     formatter = logging.Formatter(
         fmt="%(message)s",
@@ -43,22 +44,24 @@ def setup_logging():
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
 
+
 def get_logger(name: str) -> logging.Logger:
     """
     Returns a logger instance for the given name.
     """
     return logging.getLogger(name)
 
+
 def format_log(title: str, content: Any, is_json: bool = False, indent: int = 2) -> str:
     """
     Formats a log message with a title and structured content.
-    
+
     Args:
         title: The title for the log section.
         content: The content to be logged (can be a dict, str, or other object).
         is_json: If True, tries to format the content as a JSON string.
         indent: The indentation level for JSON content.
-        
+
     Returns:
         A formatted string ready for logging.
     """
@@ -73,7 +76,8 @@ def format_log(title: str, content: Any, is_json: bool = False, indent: int = 2)
             # Fallback for non-JSON or non-serializable content
             pass
 
-    return f"---" + " " + title + " ---" + "\n" + str(formatted_content)
+    return "---" + " " + title + " ---" + "\n" + str(formatted_content)
+
 
 # Initialize logging when the module is imported
 setup_logging()

@@ -39,15 +39,23 @@ class Settings(BaseSettings):
         default="https://cloudcode-pa.googleapis.com",
         description="The endpoint for the Google Cloud Code Assist API.",
     )
+    GEMINI_PUBLIC_ENDPOINT: str = Field(
+        default="https://generativelanguage.googleapis.com",
+        description="The endpoint for the public Google AI Gemini API.",
+    )
 
     # --- Authentication ---
     GEMINI_AUTH_PASSWORD: str = Field(
         default="123456", description="The password required to access the proxy."
     )
+    EMBEDDING_GEMINI_API_KEY: str = Field(
+        default="",
+        description="An optional API key for the public Gemini API, used for embeddings.",
+    )
 
     # --- File Paths ---
     PERSISTENT_STORAGE_PATH: Path = Field(
-        default_factory=lambda: Path(__file__).parent.parent / "credentials",
+        default_factory=lambda: Path(__file__).parent.parent.parent / "credentials",
         description="Base path for storing persistent data, like credential files.",
     )
     CREDENTIALS_JSON_LIST: str = Field(
@@ -56,10 +64,6 @@ class Settings(BaseSettings):
     )
 
     # --- Feature Flags & Configuration ---
-    THOUGHT_WRAPPER_TAGS: List[str] = Field(
-        default_factory=list,
-        description="A list of two strings to wrap 'thought' outputs from the model, e.g., ['<thought>', '</thought>'].",
-    )
 
     # --- Debugging ---
     DEBUG: bool = Field(

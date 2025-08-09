@@ -8,8 +8,8 @@ from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.oauth2.credentials import Credentials
 from pydantic import BaseModel, Field
 
-from .constants import SCOPES
-from .logger import format_log, get_logger
+from ..utils.constants import SCOPES
+from ..utils.logger import format_log, get_logger
 from .settings import settings
 
 logger = get_logger(__name__)
