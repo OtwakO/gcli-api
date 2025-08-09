@@ -1,4 +1,254 @@
-INFO:     10.0.1.4:49874 - "POST /v1beta/models/gemini-2.0-flash%3AstreamGenerateContent?alt=sse HTTP/1.1" 200 OK
+
+Search logs...
+Starting the Gemini API proxy...
+[20:17:03] INFO     Loaded 9 credentials from CREDENTIALS_JSON_LIST env var.
+INFO:     Started server process [11]
+INFO:     Waiting for application startup.
+INFO     Ensured credential storage directory exists at:
+/app/credentials
+INFO     Proxy is running with 9 credential(s).
+INFO     Starting credential warm-up for 9 credential(s)...
+INFO:     Application startup complete.
+DEBUG    - Warming up and refreshing expired credential for
+speedy-baton-468102-s3 (otwakodev@gmail.com)
+DEBUG    - Warming up and refreshing expired credential for
+winged-poetry-468121-e8 (otwakogame@gmail.com)
+DEBUG    - Warming up and refreshing expired credential for
+disco-arcana-468121-q0 (otwakomusic@gmail.com)
+DEBUG    - Warming up and refreshing expired credential for
+stone-forest-djkxm (secqxawx.dev@gmail.com)
+DEBUG    - Warming up and refreshing expired credential for
+formidable-rune-468121-g9 (secqxawx.game@gmail.com)
+DEBUG    - Warming up and refreshing expired credential for
+geminicli-468121 (secqxawx.music@gmail.com)
+DEBUG    - Warming up and refreshing expired credential for
+gemini-agents-458715 (verychillpikachu@gmail.com)
+DEBUG    Starting new HTTPS connection (1): oauth2.googleapis.com:443
+DEBUG    Starting new HTTPS connection (1): oauth2.googleapis.com:443
+DEBUG    Starting new HTTPS connection (1): oauth2.googleapis.com:443
+DEBUG    - Warming up and refreshing expired credential for
+focal-rig-468218-v3 (verymadpikachu@gmail.com)
+DEBUG    Starting new HTTPS connection (1): oauth2.googleapis.com:443
+DEBUG    Starting new HTTPS connection (1): oauth2.googleapis.com:443
+DEBUG    Starting new HTTPS connection (1): oauth2.googleapis.com:443
+DEBUG    Starting new HTTPS connection (1): oauth2.googleapis.com:443
+DEBUG    - Warming up and refreshing expired credential for
+geminicli-2-468218 (verymadpikachu@gmail.com)
+DEBUG    Starting new HTTPS connection (1): oauth2.googleapis.com:443
+INFO:     Uvicorn running on http://0.0.0.0:7860 (Press CTRL+C to quit)
+DEBUG    https://oauth2.googleapis.com:443 "POST /token HTTP/1.1" 200
+None
+DEBUG    Starting new HTTPS connection (1): oauth2.googleapis.com:443
+DEBUG    - Credential for stone-forest-djkxm (secqxawx.dev@gmail.com)
+refreshed successfully during warm-up.
+DEBUG    https://oauth2.googleapis.com:443 "POST /token HTTP/1.1" 200
+None
+DEBUG    https://oauth2.googleapis.com:443 "POST /token HTTP/1.1" 200
+None
+DEBUG    https://oauth2.googleapis.com:443 "POST /token HTTP/1.1" 200
+None
+DEBUG    https://oauth2.googleapis.com:443 "POST /token HTTP/1.1" 200
+None
+DEBUG    https://oauth2.googleapis.com:443 "POST /token HTTP/1.1" 200
+None
+DEBUG    - Credential for disco-arcana-468121-q0
+(otwakomusic@gmail.com) refreshed successfully during
+warm-up.
+DEBUG    https://oauth2.googleapis.com:443 "POST /token HTTP/1.1" 200
+None
+DEBUG    https://oauth2.googleapis.com:443 "POST /token HTTP/1.1" 200
+None
+DEBUG    - Credential for speedy-baton-468102-s3
+(otwakodev@gmail.com) refreshed successfully during warm-up.
+DEBUG    - Credential for focal-rig-468218-v3
+(verymadpikachu@gmail.com) refreshed successfully during
+warm-up.
+DEBUG    - Credential for geminicli-468121 (secqxawx.music@gmail.com)
+refreshed successfully during warm-up.
+DEBUG    - Credential for formidable-rune-468121-g9
+(secqxawx.game@gmail.com) refreshed successfully during
+warm-up.
+DEBUG    - Credential for gemini-agents-458715
+(verychillpikachu@gmail.com) refreshed successfully during
+warm-up.
+DEBUG    - Credential for winged-poetry-468121-e8
+(otwakogame@gmail.com) refreshed successfully during
+warm-up.
+[20:17:06] DEBUG    https://oauth2.googleapis.com:443 "POST /token HTTP/1.1" 200
+None
+DEBUG    - Credential for geminicli-2-468218
+(verymadpikachu@gmail.com) refreshed successfully during
+warm-up.
+INFO     Credential warm-up complete. Refreshed: 9, Failed: 0
+[20:17:29] DEBUG    --- Incoming Request ---
+{
+"method": "OPTIONS",
+"url":
+"http://gcli-api.astralyte.xyz/v1/chat/completions",
+"headers": {
+"host": "gcli-api.astralyte.xyz",
+"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)
+AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0
+Safari/537.36 Edg/138.0.0.0",
+"accept": "*/*",
+"accept-encoding": "gzip, br",
+"accept-language":
+"zh-TW,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6,zh-CN;q=0.5
+",
+"access-control-request-headers":
+"authorization,content-type,x-stainless-arch,x-stainless-lan
+g,x-stainless-os,x-stainless-package-version,x-stainless-ret
+ry-count,x-stainless-runtime,x-stainless-runtime-version,x-s
+tainless-timeout",
+"access-control-request-method": "POST",
+"cache-control": "no-cache",
+"cdn-loop": "cloudflare; loops=1",
+"cf-connecting-ip": "36.227.209.61",
+"cf-ipcountry": "TW",
+"cf-ray": "96c730cd6f097cb9-LAX",
+"cf-visitor": "{\"scheme\":\"https\"}",
+"origin": "https://lobe-chat.astralyte.xyz",
+"pragma": "no-cache",
+"priority": "u=1, i",
+"referer": "https://lobe-chat.astralyte.xyz/",
+"sec-fetch-dest": "empty",
+"sec-fetch-mode": "cors",
+"sec-fetch-site": "same-site",
+"x-forwarded-for": "172.70.215.45",
+"x-forwarded-host": "gcli-api.astralyte.xyz",
+"x-forwarded-port": "443",
+"x-forwarded-proto": "https",
+"x-forwarded-server": "4577ffbd207a",
+"x-real-ip": "172.70.215.45"
+}
+}
+INFO:     10.0.1.4:40726 - "OPTIONS /v1/chat/completions HTTP/1.1" 200 OK
+DEBUG    --- Incoming Request ---
+{
+"method": "POST",
+"url":
+"http://gcli-api.astralyte.xyz/v1/chat/completions",
+"headers": {
+"host": "gcli-api.astralyte.xyz",
+"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)
+AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0
+Safari/537.36 Edg/138.0.0.0",
+"content-length": "266",
+"accept": "*/*",
+"accept-encoding": "gzip, br",
+"accept-language":
+"zh-TW,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6,zh-CN;q=0.5
+",
+"authorization": "Bearer
+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",
+"cache-control": "no-cache",
+"cdn-loop": "cloudflare; loops=1",
+"cf-connecting-ip": "36.227.209.61",
+"cf-ipcountry": "TW",
+"cf-ray": "96c730cfcf177cb9-LAX",
+"cf-visitor": "{\"scheme\":\"https\"}",
+"content-type": "application/json",
+"origin": "https://lobe-chat.astralyte.xyz",
+"pragma": "no-cache",
+"priority": "u=1, i",
+"referer": "https://lobe-chat.astralyte.xyz/",
+"sec-ch-ua": "\"Not)A;Brand\";v=\"8\",
+\"Chromium\";v=\"138\", \"Microsoft Edge\";v=\"138\"",
+"sec-ch-ua-mobile": "?0",
+"sec-ch-ua-platform": "\"Windows\"",
+"sec-fetch-dest": "empty",
+"sec-fetch-mode": "cors",
+"sec-fetch-site": "same-site",
+"x-forwarded-for": "172.70.215.45",
+"x-forwarded-host": "gcli-api.astralyte.xyz",
+"x-forwarded-port": "443",
+"x-forwarded-proto": "https",
+"x-forwarded-server": "4577ffbd207a",
+"x-real-ip": "172.70.215.45",
+"x-stainless-arch": "unknown",
+"x-stainless-lang": "js",
+"x-stainless-os": "Unknown",
+"x-stainless-package-version": "4.104.0",
+"x-stainless-retry-count": "0",
+"x-stainless-runtime": "browser:chrome",
+"x-stainless-runtime-version": "138.0.0",
+"x-stainless-timeout": "600"
+}
+}
+INFO     --- Credential Selection ---
+{
+"index": 0,
+"user_email": "otwakodev@gmail.com",
+"project_id": "speedy-baton-468102-s3",
+"refresh_token_snippet": "...hY_GI"
+}
+INFO     Handling Proxy Request for model 'gpt-4.1-nano' with action
+'streamGenerateContent' (Streaming)
+[20:17:30] INFO     User otwakodev@gmail.com is already onboarded for project
+speedy-baton-468102-s3.
+DEBUG    --- Upstream Request to Google ---
+{
+"url":
+"https://cloudcode-pa.googleapis.com/v1internal:streamGenera
+teContent?alt=sse",
+"headers": {
+"Authorization": "Bearer
+ya29.a0AS3H6NzEhMJaifwoN8FbI_gR5F4bNRMcSdb1Hv9mDYfh-btZIr0sY
+bCteLN6RfqZwuqCA2pAONP4TJJYHfFAgAWIEH97DX-ik-vUkdi23DvW3ZIW2
+kBRo4n3HKhzUlIrpKdWniRz2JLo-b_mtxOnVDN_XQ-gZwRqoM2zHyUfbuAh2
+_4aCgYKAdMSARASFQHGX2MiApp6iXuUAgyfgZ4q1GlYgQ0182",
+"Content-Type": "application/json",
+"User-Agent": "GeminiCLI/0.1.5 (Linux; x86_64)"
+},
+"payload": {
+"model": "gpt-4.1-nano",
+"project": "speedy-baton-468102-s3",
+"request": {
+"contents": [
+{
+"role": "user",
+"parts": [
+{
+"text": "<REDACTED>"
+}
+]
+}
+],
+"systemInstruction": null,
+"tools": null,
+"toolConfig": null,
+"safetySettings": [
+{
+"category": "HARM_CATEGORY_HARASSMENT",
+"threshold": "BLOCK_NONE"
+},
+{
+"category": "HARM_CATEGORY_HATE_SPEECH",
+"threshold": "BLOCK_NONE"
+},
+{
+"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+"threshold": "BLOCK_NONE"
+},
+{
+"category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+"threshold": "BLOCK_NONE"
+},
+{
+"category": "HARM_CATEGORY_CIVIC_INTEGRITY",
+"threshold": "BLOCK_NONE"
+}
+],
+"generationConfig": {
+"temperature": 1.0,
+"topP": 1.0,
+"frequencyPenalty": 0.0,
+"presencePenalty": 0.0
+}
+}
+}
+}
+INFO:     10.0.1.4:40726 - "POST /v1/chat/completions HTTP/1.1" 200 OK
 ERROR:    Exception in ASGI application
 + Exception Group Traceback (most recent call last):
 |   File "/app/.venv/lib/python3.12/site-packages/starlette/_utils.py", line 76, in collapse_excgroups
@@ -64,15 +314,17 @@ ERROR:    Exception in ASGI application
 |     await func()
 |   File "/app/.venv/lib/python3.12/site-packages/starlette/responses.py", line 246, in stream_response
 |     async for chunk in self.body_iterator:
-|   File "/app/src/core/streaming.py", line 124, in process
-|     f"Upstream API Error (Streaming): {e.response.status_code} - {e.response.text}"
-|                                                                   ^^^^^^^^^^^^^^^
-|   File "/app/.venv/lib/python3.12/site-packages/httpx/_models.py", line 644, in text
-|     content = self.content
-|               ^^^^^^^^^^^^
-|   File "/app/.venv/lib/python3.12/site-packages/httpx/_models.py", line 638, in content
-|     raise ResponseNotRead()
-| httpx.ResponseNotRead: Attempted to access streaming response content, without having called `read()`.
+|   File "/app/src/core/streaming.py", line 123, in process
+|     error_text = await e.response.aread()
+|                  ^^^^^^^^^^^^^^^^^^^^^^^^
+|   File "/app/.venv/lib/python3.12/site-packages/httpx/_models.py", line 979, in aread
+|     self._content = b"".join([part async for part in self.aiter_bytes()])
+|                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+|   File "/app/.venv/lib/python3.12/site-packages/httpx/_models.py", line 997, in aiter_bytes
+|     async for raw_bytes in self.aiter_raw():
+|   File "/app/.venv/lib/python3.12/site-packages/httpx/_models.py", line 1046, in aiter_raw
+|     raise StreamClosed()
+| httpx.StreamClosed: Attempted to read or stream content, but the stream has been closed.
 +------------------------------------
 During handling of the above exception, another exception occurred:
 Traceback (most recent call last):
@@ -129,12 +381,14 @@ File "/app/.venv/lib/python3.12/site-packages/starlette/responses.py", line 266,
 await func()
 File "/app/.venv/lib/python3.12/site-packages/starlette/responses.py", line 246, in stream_response
 async for chunk in self.body_iterator:
-File "/app/src/core/streaming.py", line 124, in process
-f"Upstream API Error (Streaming): {e.response.status_code} - {e.response.text}"
-^^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/httpx/_models.py", line 644, in text
-content = self.content
-^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/httpx/_models.py", line 638, in content
-raise ResponseNotRead()
-httpx.ResponseNotRead: Attempted to access streaming response content, without having called `read()`.
+File "/app/src/core/streaming.py", line 123, in process
+error_text = await e.response.aread()
+^^^^^^^^^^^^^^^^^^^^^^^^
+File "/app/.venv/lib/python3.12/site-packages/httpx/_models.py", line 979, in aread
+self._content = b"".join([part async for part in self.aiter_bytes()])
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/app/.venv/lib/python3.12/site-packages/httpx/_models.py", line 997, in aiter_bytes
+async for raw_bytes in self.aiter_raw():
+File "/app/.venv/lib/python3.12/site-packages/httpx/_models.py", line 1046, in aiter_raw
+raise StreamClosed()
+httpx.StreamClosed: Attempted to read or stream content, but the stream has been closed.

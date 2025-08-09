@@ -85,19 +85,25 @@ class GoogleStreamer(Streamer):
         )
 
         async with httpx.AsyncClient(timeout=settings.UPSTREAM_TIMEOUT) as client:
-            async with client.stream(
-                "POST",
-                self.target_url,
-                headers=prepared_request.headers,
-                data=prepared_request.data,
-            ) as response:
-                response.raise_for_status()
-                if settings.DEBUG:
-                    logger.debug(
-                        f"Upstream Response from Google (Streaming): {response.status_code}"
-                    )
-                async for chunk in _parse_google_sse(response):
-                    yield chunk
+            try:
+                async with client.stream(
+                    "POST",
+                    self.target_url,
+                    headers=prepared_request.headers,
+                    data=prepared_request.data,
+                ) as response:
+                    response.raise_for_status()
+                    if settings.DEBUG:
+                        logger.debug(
+                            f"Upstream Response from Google (Streaming): {response.status_code}"
+                        )
+                    async for chunk in _parse_google_sse(response):
+                        yield chunk
+            except httpx.HTTPStatusError as e:
+                error_body = await e.response.aread()
+                raise Exception(
+                    f"Upstream API Error: {e.response.status_code} - {error_body.decode()}"
+                )
 
 
 async def _fetch_project_id(managed_cred: ManagedCredential) -> str:

@@ -119,16 +119,6 @@ class StreamProcessor:
             for event in self.formatter.format_chunk(None):
                 yield event
 
-        except httpx.HTTPStatusError as e:
-            error_text = await e.response.aread()
-            logger.error(
-                f"Upstream API Error (Streaming): {e.response.status_code} - {error_text.decode()}"
-            )
-            error_payload = {
-                "error": {"message": f"Upstream API Error: {error_text.decode()}"}
-            }
-            yield f"data: {json.dumps(error_payload)}"
-
         except Exception as e:
             logger.error(f"Generic stream processing error: {e}", exc_info=True)
             error_payload = {
