@@ -120,11 +120,12 @@ class StreamProcessor:
                 yield event
 
         except httpx.HTTPStatusError as e:
+            error_text = await e.response.aread()
             logger.error(
-                f"Upstream API Error (Streaming): {e.response.status_code} - {e.response.text}"
+                f"Upstream API Error (Streaming): {e.response.status_code} - {error_text.decode()}"
             )
             error_payload = {
-                "error": {"message": f"Upstream API Error: {e.response.text}"}
+                "error": {"message": f"Upstream API Error: {error_text.decode()}"}
             }
             yield f"data: {json.dumps(error_payload)}"
 

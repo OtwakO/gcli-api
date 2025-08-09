@@ -1,0 +1,140 @@
+INFO:     10.0.1.4:49874 - "POST /v1beta/models/gemini-2.0-flash%3AstreamGenerateContent?alt=sse HTTP/1.1" 200 OK
+ERROR:    Exception in ASGI application
++ Exception Group Traceback (most recent call last):
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/_utils.py", line 76, in collapse_excgroups
+|     yield
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/responses.py", line 263, in __call__
+|     async with anyio.create_task_group() as task_group:
+|                ^^^^^^^^^^^^^^^^^^^^^^^^^
+|   File "/app/.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 772, in __aexit__
+|     raise BaseExceptionGroup(
+| ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
++-+---------------- 1 ----------------
+| Traceback (most recent call last):
+|   File "/app/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 409, in run_asgi
+|     result = await app(  # type: ignore[func-returns-value]
+|              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+|   File "/app/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+|     return await self.app(scope, receive, send)
+|            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+|   File "/app/.venv/lib/python3.12/site-packages/fastapi/applications.py", line 1054, in __call__
+|     await super().__call__(scope, receive, send)
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/applications.py", line 112, in __call__
+|     await self.middleware_stack(scope, receive, send)
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 187, in __call__
+|     raise exc
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 165, in __call__
+|     await self.app(scope, receive, _send)
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 183, in __call__
+|     raise app_exc
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 141, in coro
+|     await self.app(scope, receive_or_disconnect, send_no_error)
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/cors.py", line 93, in __call__
+|     await self.simple_response(scope, receive, send, request_headers=headers)
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/cors.py", line 144, in simple_response
+|     await self.app(scope, receive, send)
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 62, in __call__
+|     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+|     raise exc
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+|     await app(scope, receive, sender)
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 714, in __call__
+|     await self.middleware_stack(scope, receive, send)
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 734, in app
+|     await route.handle(scope, receive, send)
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 288, in handle
+|     await self.app(scope, receive, send)
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 76, in app
+|     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+|     raise exc
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+|     await app(scope, receive, sender)
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 74, in app
+|     await response(scope, receive, send)
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/responses.py", line 262, in __call__
+|     with collapse_excgroups():
+|          ^^^^^^^^^^^^^^^^^^^^
+|   File "/usr/local/lib/python3.12/contextlib.py", line 158, in __exit__
+|     self.gen.throw(value)
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/_utils.py", line 82, in collapse_excgroups
+|     raise exc
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/responses.py", line 266, in wrap
+|     await func()
+|   File "/app/.venv/lib/python3.12/site-packages/starlette/responses.py", line 246, in stream_response
+|     async for chunk in self.body_iterator:
+|   File "/app/src/core/streaming.py", line 124, in process
+|     f"Upstream API Error (Streaming): {e.response.status_code} - {e.response.text}"
+|                                                                   ^^^^^^^^^^^^^^^
+|   File "/app/.venv/lib/python3.12/site-packages/httpx/_models.py", line 644, in text
+|     content = self.content
+|               ^^^^^^^^^^^^
+|   File "/app/.venv/lib/python3.12/site-packages/httpx/_models.py", line 638, in content
+|     raise ResponseNotRead()
+| httpx.ResponseNotRead: Attempted to access streaming response content, without having called `read()`.
++------------------------------------
+During handling of the above exception, another exception occurred:
+Traceback (most recent call last):
+File "/app/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 409, in run_asgi
+result = await app(  # type: ignore[func-returns-value]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/app/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+return await self.app(scope, receive, send)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/app/.venv/lib/python3.12/site-packages/fastapi/applications.py", line 1054, in __call__
+await super().__call__(scope, receive, send)
+File "/app/.venv/lib/python3.12/site-packages/starlette/applications.py", line 112, in __call__
+await self.middleware_stack(scope, receive, send)
+File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 187, in __call__
+raise exc
+File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 165, in __call__
+await self.app(scope, receive, _send)
+File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 183, in __call__
+raise app_exc
+File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 141, in coro
+await self.app(scope, receive_or_disconnect, send_no_error)
+File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/cors.py", line 93, in __call__
+await self.simple_response(scope, receive, send, request_headers=headers)
+File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/cors.py", line 144, in simple_response
+await self.app(scope, receive, send)
+File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 62, in __call__
+await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+raise exc
+File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+await app(scope, receive, sender)
+File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 714, in __call__
+await self.middleware_stack(scope, receive, send)
+File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 734, in app
+await route.handle(scope, receive, send)
+File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 288, in handle
+await self.app(scope, receive, send)
+File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 76, in app
+await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+raise exc
+File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+await app(scope, receive, sender)
+File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 74, in app
+await response(scope, receive, send)
+File "/app/.venv/lib/python3.12/site-packages/starlette/responses.py", line 262, in __call__
+with collapse_excgroups():
+^^^^^^^^^^^^^^^^^^^^
+File "/usr/local/lib/python3.12/contextlib.py", line 158, in __exit__
+self.gen.throw(value)
+File "/app/.venv/lib/python3.12/site-packages/starlette/_utils.py", line 82, in collapse_excgroups
+raise exc
+File "/app/.venv/lib/python3.12/site-packages/starlette/responses.py", line 266, in wrap
+await func()
+File "/app/.venv/lib/python3.12/site-packages/starlette/responses.py", line 246, in stream_response
+async for chunk in self.body_iterator:
+File "/app/src/core/streaming.py", line 124, in process
+f"Upstream API Error (Streaming): {e.response.status_code} - {e.response.text}"
+^^^^^^^^^^^^^^^
+File "/app/.venv/lib/python3.12/site-packages/httpx/_models.py", line 644, in text
+content = self.content
+^^^^^^^^^^^^
+File "/app/.venv/lib/python3.12/site-packages/httpx/_models.py", line 638, in content
+raise ResponseNotRead()
+httpx.ResponseNotRead: Attempted to access streaming response content, without having called `read()`.
