@@ -74,6 +74,12 @@ class GeminiRequest(BaseModel):
     cachedContent: Optional[str] = None
 
 
+class SafetyRating(BaseModel):
+    category: str
+    probability: str
+    blocked: Optional[bool] = None
+
+
 class GroundingMetadata(BaseModel):
     webSearchQueries: Optional[List[str]] = None
     searchEntryPoint: Optional[Dict[str, Any]] = None
@@ -85,7 +91,7 @@ class GeminiCandidate(BaseModel):
     finishReason: Optional[str] = None
     index: int = 0
     groundingMetadata: Optional[GroundingMetadata] = None
-    safetyRatings: Optional[List[Dict[str, Any]]] = None
+    safetyRatings: Optional[List[SafetyRating]] = None
     avgLogprobs: Optional[float] = None
 
 
@@ -99,9 +105,17 @@ class GeminiUsageMetadata(BaseModel):
     thoughtsTokenCount: Optional[int] = None
 
 
+class PromptFeedback(BaseModel):
+    blockReason: Optional[str] = None
+    safetyRatings: Optional[List[SafetyRating]] = None
+
+
 class GeminiResponse(BaseModel):
     candidates: List[GeminiCandidate]
+    promptFeedback: Optional[PromptFeedback] = None
     usageMetadata: Optional[GeminiUsageMetadata] = None
+    modelVersion: Optional[str] = None
+    responseId: Optional[str] = None
 
 
 class CountTokensResponse(BaseModel):
