@@ -70,7 +70,7 @@ class Settings(BaseSettings):
         default=False, description="Enable debug logging and other debug features."
     )
     DEBUG_REDACT_LOGS: bool = Field(
-        default=False, description="Redact sensitive data from debug logs."
+        default=True, description="Redact sensitive data from debug logs."
     )
 
     class Config:

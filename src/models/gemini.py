@@ -2,6 +2,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
+from .base import ExtensibleModel
+
 
 # Gemini Models
 class GeminiFunctionCall(BaseModel):
@@ -78,6 +80,9 @@ class SafetyRating(BaseModel):
     category: str
     probability: str
     blocked: Optional[bool] = None
+    probabilityScore: Optional[float] = None
+    severity: Optional[str] = None
+    severityScore: Optional[float] = None
 
 
 class GroundingMetadata(BaseModel):
@@ -116,6 +121,48 @@ class GeminiResponse(BaseModel):
     usageMetadata: Optional[GeminiUsageMetadata] = None
     modelVersion: Optional[str] = None
     responseId: Optional[str] = None
+    createTime: Optional[str] = None
+
+
+class CountTokensRequest(BaseModel):
+    """Request model for the countTokens endpoint."""
+
+    contents: List[GeminiContent]
+    systemInstruction: Optional[GeminiSystemInstruction] = None
+    tools: Optional[List[Dict[str, Any]]] = None
+
+    class Config:
+        extra = "allow"
+
+
+class EmbedContentRequest(BaseModel):
+    """Request model for the embedContent endpoint."""
+
+    content: GeminiContent
+    taskType: Optional[str] = None
+    outputDimensionality: Optional[int] = None
+
+    class Config:
+        extra = "allow"
+
+
+class BatchEmbedRequestItem(BaseModel):
+    """An item within a batch embedding request."""
+
+    model: str
+    content: GeminiContent
+    taskType: Optional[str] = None
+    title: Optional[str] = None
+    outputDimensionality: Optional[int] = None
+
+    class Config:
+        extra = "allow"
+
+
+class BatchEmbedContentsRequest(ExtensibleModel):
+    """Request model for the batchEmbedContents endpoint."""
+
+    requests: List[BatchEmbedRequestItem]
 
 
 class CountTokensResponse(BaseModel):

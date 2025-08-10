@@ -67,6 +67,9 @@ venv.bak/
 *.swo
 *~
 
+# Ruff
+.ruff_cache/
+
 # OS
 .DS_Store
 .DS_Store?

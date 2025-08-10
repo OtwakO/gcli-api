@@ -3,7 +3,8 @@ from typing import Any, Dict, Union
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from ..core.google_api_client import send_public_api_request
+from ..core.upstream_auth import ApiKeyStrategy
+from ..core.google_api_client import send_request
 from ..core.settings import settings
 from ..models.gemini import BatchEmbedContentResponse, EmbedContentResponse
 from ..utils.logger import get_logger
@@ -49,10 +50,9 @@ class EmbeddingService:
 
         try:
             target_url = build_gemini_url(action, model_name)
+            auth_strategy = ApiKeyStrategy(settings.EMBEDDING_GEMINI_API_KEY)
 
-            upstream_response = await send_public_api_request(
-                target_url, settings.EMBEDDING_GEMINI_API_KEY, payload
-            )
+            upstream_response = await send_request(target_url, payload, auth_strategy)
             gemini_response_obj = upstream_response.json()
 
             if action == "batchEmbedContents":

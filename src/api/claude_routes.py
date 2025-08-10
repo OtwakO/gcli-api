@@ -1,13 +1,13 @@
-import uuid
-
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..adapters.adapters import claude_adapter
+from ..adapters.formatters import FormatterContext
 from ..core.credential_manager import ManagedCredential
-from .dependencies import get_validated_credential
-from .response_handler import handle_request
-from ..utils.logger import get_logger
 from ..models.claude import ClaudeMessagesRequest
+from ..services.chat_completion_service import chat_completion_service
+from ..utils.logger import get_logger
+from ..utils.utils import generate_response_id
+from .dependencies import get_validated_credential
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -24,28 +24,28 @@ async def claude_messages(
     Claude SSE format.
     """
     try:
-        is_streaming = claude_request.stream
         model_name, gemini_request_body = claude_adapter.request_transformer(
             claude_request
         )
-        action = "streamGenerateContent" if is_streaming else "generateContent"
 
-        formatter_context = {
-            "response_id": f"msg_{uuid.uuid4().hex}",
-            "model": model_name,
-        }
+        formatter_context = FormatterContext(
+            response_id=generate_response_id("msg"),
+            model=model_name,
+        )
         formatter = claude_adapter.formatter_class(formatter_context)
 
-        return await handle_request(
+        return await chat_completion_service.handle_chat_request(
             model_name=model_name,
-            action=action,
             managed_cred=managed_cred,
             gemini_request_body=gemini_request_body,
-            is_streaming=is_streaming,
+            is_streaming=claude_request.stream,
             formatter=formatter,
+            source_api="Claude-compatible",
             original_request=claude_request,
         )
 
     except Exception as e:
         logger.error(f"Error processing Claude request: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
+        raise HTTPException(
+            status_code=500, detail="An unexpected internal server error occurred."
+        )

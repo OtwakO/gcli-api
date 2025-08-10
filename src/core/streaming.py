@@ -1,32 +1,25 @@
 import json
-from abc import ABC, abstractmethod
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator, Dict, Union
 
 import httpx
 from pydantic import ValidationError
 
 from ..adapters.formatters import Formatter, OpenAIFormatter
+from .upstream_auth import OAuthStrategy
+from ..core.credential_manager import ManagedCredential
 from ..models.gemini import GeminiResponse
 from ..utils.logger import format_log, get_logger
+from ..utils.utils import get_user_agent
 from .settings import settings
 
 logger = get_logger(__name__)
-
-
-class StreamParseError(Exception):
-    """Custom exception for errors during stream parsing."""
-
-    def __init__(self, message: str, original_text: str):
-        super().__init__(message)
-        self.original_text = original_text
 
 
 async def _parse_google_sse(
     response: httpx.Response,
 ) -> AsyncGenerator[GeminiResponse, None]:
     """
-    Parses Google's SSE stream line-by-line, mirroring the logic from the
-    working reference project.
+    Parses Google's SSE stream line-by-line.
     """
     async for line in response.aiter_lines():
         if not line:
@@ -43,16 +36,13 @@ async def _parse_google_sse(
             api_response_obj = json.loads(data_str)
             gemini_response = None
 
-            # Strategy 1: Try to parse the entire object as a GeminiResponse.
             try:
                 gemini_response = GeminiResponse.model_validate(api_response_obj)
             except ValidationError:
-                # Strategy 2: If that fails, look for a "response" key.
                 if "response" in api_response_obj:
                     gemini_response = GeminiResponse.model_validate(
                         api_response_obj["response"]
                     )
-                    # Carry over usage metadata if it's outside the 'response' object
                     if (
                         "usageMetadata" in api_response_obj
                         and not gemini_response.usageMetadata
@@ -71,7 +61,6 @@ async def _parse_google_sse(
                         )
                     )
                 yield gemini_response
-            # Strategy 3: Handle metadata-only chunks.
             elif "usageMetadata" in api_response_obj:
                 gemini_response = GeminiResponse(
                     candidates=[], usageMetadata=api_response_obj["usageMetadata"]
@@ -92,41 +81,98 @@ async def _parse_google_sse(
             )
 
 
-class Streamer(ABC):
-    """Abstract base class for a provider-specific streamer."""
+class StreamError(Exception):
+    """Represents a handled error from the stream."""
 
-    @abstractmethod
-    async def stream(self) -> AsyncGenerator[GeminiResponse, None]:
-        """Yields GeminiResponse objects from the upstream provider."""
-        yield
+    def __init__(self, status_code: int, message: str):
+        super().__init__(message)
+        self.status_code = status_code
+        self.message = message
 
 
 class StreamProcessor:
-    """Orchestrates the streaming process by connecting a Streamer to a Formatter."""
+    """
+    Handles the entire streaming process, from making the request to formatting
+    the output and handling errors gracefully.
+    """
 
-    def __init__(self, streamer: Streamer, formatter: Formatter):
-        self.streamer = streamer
+    def __init__(
+        self,
+        managed_cred: ManagedCredential,  # Kept for now, auth_strategy is primary
+        target_url: str,
+        payload: Dict[str, Any],
+        formatter: Formatter,
+    ):
+        self.target_url = target_url
+        self.payload = payload
         self.formatter = formatter
+        self.auth_strategy = OAuthStrategy(managed_cred)
+
+    async def _stream_generator(
+        self,
+    ) -> AsyncGenerator[Union[GeminiResponse, StreamError], None]:
+        """
+        Connects to the upstream API and yields either GeminiResponse chunks
+        or a StreamError.
+        """
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": get_user_agent(),
+            **self.auth_strategy.get_headers(),
+        }
+        final_post_data = json.dumps(self.payload, ensure_ascii=False)
+
+        async with httpx.AsyncClient(timeout=settings.UPSTREAM_TIMEOUT) as client:
+            async with client.stream(
+                "POST",
+                self.target_url,
+                headers=headers,
+                data=final_post_data,
+            ) as response:
+                try:
+                    response.raise_for_status()
+                    async for chunk in _parse_google_sse(response):
+                        yield chunk
+                except httpx.HTTPStatusError as e:
+                    error_body = await e.response.aread()
+                    yield StreamError(
+                        status_code=e.response.status_code, message=error_body.decode()
+                    )
 
     async def process(self) -> AsyncGenerator[str, None]:
-        """The main pipeline orchestrator for processing and formatting the stream."""
+        """
+        The main pipeline orchestrator. It consumes the stream generator and
+        formats the output for the client, handling errors cleanly.
+        """
+        had_error = False
         try:
-            async for chunk in self.streamer.stream():
-                for event in self.formatter.format_chunk(chunk):
+            async for chunk in self._stream_generator():
+                if isinstance(chunk, StreamError):
+                    had_error = True
+                    logger.error(
+                        f"Upstream API Error (Streaming): {chunk.status_code} - {chunk.message}"
+                    )
+                    error_payload = {"error": {"message": chunk.message}}
+                    yield f"data: {json.dumps(error_payload)}\n\n"
+                    break  # Stop processing after a handled error
+                else:
+                    for event in self.formatter.format_chunk(chunk):
+                        yield event
+
+            if not had_error:
+                # Signal the end of the stream to the formatter
+                for event in self.formatter.format_chunk(None):
                     yield event
 
-            # Signal the end of the stream to the formatter
-            for event in self.formatter.format_chunk(None):
-                yield event
-
         except Exception as e:
-            logger.error(f"Generic stream processing error: {e}", exc_info=True)
+            # This catches unexpected errors (bugs, network issues, etc.)
+            logger.error("Generic stream processing error", exc_info=True)
             error_payload = {
                 "error": {
                     "message": f"An unexpected error occurred during streaming: {e}"
                 }
             }
-            yield f"data: {json.dumps(error_payload)}"
+            yield f"data: {json.dumps(error_payload)}\n\n"
 
         if isinstance(self.formatter, OpenAIFormatter):
-            yield "data: [DONE]"
+            yield "data: [DONE]\n\n"

@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Union, Literal
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel
 
@@ -23,9 +23,6 @@ class ClaudeMessagesRequest(BaseModel):
     tools: Optional[List[Dict[str, Any]]] = None
     tool_choice: Optional[Dict[str, Any]] = None
     response_format: Optional[Dict[str, Any]] = None
-
-    class Config:
-        extra = "allow"
 
 
 # --- Claude Response Models ---

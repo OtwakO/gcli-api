@@ -1,10 +1,8 @@
 import json
 import time
-import uuid
-from typing import Any, Dict, List, Optional, Union, Tuple
+from datetime import datetime
+from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 
-from ..utils.constants import DEFAULT_SAFETY_SETTINGS
-from ..utils.logger import get_logger
 from ..models.gemini import (
     BatchEmbedContentResponse,
     EmbedContentResponse,
@@ -15,6 +13,7 @@ from ..models.gemini import (
     GeminiSystemInstruction,
 )
 from ..models.openai import (
+    FunctionCall,
     OpenAIChatCompletionChoice,
     OpenAIChatCompletionRequest,
     OpenAIChatCompletionResponse,
@@ -27,8 +26,10 @@ from ..models.openai import (
     OpenAIEmbeddingResponse,
     OpenAIUsage,
     ToolCall,
-    FunctionCall,
 )
+from ..utils.constants import DEFAULT_SAFETY_SETTINGS
+from ..utils.logger import get_logger
+from ..utils.utils import generate_response_id, get_extra_fields
 
 logger = get_logger(__name__)
 
@@ -231,6 +232,10 @@ def _transform_tool_config(
             mode = "NONE"
         elif req.tool_choice == "auto":
             mode = "AUTO"
+        elif req.tool_choice == "required":
+            # "required" in OpenAI means the model must call a tool.
+            # The closest Gemini equivalent is "ANY", which forces a call from the available tools.
+            mode = "ANY"
     elif isinstance(req.tool_choice, dict):
         function_name = req.tool_choice.get("function", {}).get("name")
         if function_name:
@@ -264,9 +269,12 @@ def openai_request_to_gemini(req: OpenAIChatCompletionRequest) -> GeminiRequest:
     if system_message_index != -1:
         messages.pop(system_message_index)
 
+    generation_config = _transform_generation_config(req)
+    generation_config.update(get_extra_fields(req))
+
     gemini_request = GeminiRequest(
         contents=_transform_messages(messages),
-        generationConfig=_transform_generation_config(req),
+        generationConfig=generation_config,
         safetySettings=DEFAULT_SAFETY_SETTINGS,
         systemInstruction=system_instruction,
         tools=_transform_tools(req),
@@ -276,59 +284,77 @@ def openai_request_to_gemini(req: OpenAIChatCompletionRequest) -> GeminiRequest:
     return gemini_request
 
 
-def _gemini_candidate_to_openai_choice(
-    candidate, is_streaming: bool = False
-) -> Union[OpenAIChatCompletionStreamChoice, OpenAIChatCompletionChoice]:
-    """Transforms a single Gemini candidate into an OpenAI choice object."""
+def _gemini_candidate_to_openai_choices(
+    candidate,
+    is_streaming: bool = False,
+) -> Generator[
+    Union[OpenAIChatCompletionStreamChoice, OpenAIChatCompletionChoice], None, None
+]:
+    """
+    Transforms a single Gemini candidate into a generator of one or more
+    OpenAI choice objects, handling mixed text and tool call content.
+    """
     parts = candidate.content.parts
-    tool_calls = []
-    content_text = None
+    total_parts = len(parts)
 
-    for part in parts:
+    for i, part in enumerate(parts):
+        is_last_part = i == total_parts - 1
+        finish_reason = (
+            _map_finish_reason(candidate.finishReason, is_streaming=is_streaming)
+            if is_last_part
+            else None
+        )
+
+        # Part 1: Yield a text choice if text exists
+        if part.text:
+            if is_streaming:
+                delta = OpenAIDelta(content=part.text)
+                # Only the first part from a mixed content part should have the role
+                if not part.functionCall:
+                    delta.role = "assistant"
+                yield OpenAIChatCompletionStreamChoice(
+                    index=candidate.index,
+                    delta=delta,
+                    # Finish reason is only sent with the very last yielded choice
+                    finish_reason=finish_reason if not part.functionCall else None,
+                )
+            else:
+                message = OpenAIChatMessage(role="assistant", content=part.text)
+                yield OpenAIChatCompletionChoice(
+                    index=candidate.index, message=message, finish_reason=finish_reason
+                )
+
+        # Part 2: Yield a tool call choice if a function call exists
         if part.functionCall:
             fc = part.functionCall
             tool_call = ToolCall(
                 id=fc.name,
                 function=FunctionCall(name=fc.name, arguments=json.dumps(fc.args)),
             )
+
             if is_streaming:
                 tool_call.index = 0  # Add index for streaming tool calls
-            tool_calls.append(tool_call)
-        if part.text:
-            content_text = part.text
-
-    if is_streaming:
-        delta = OpenAIDelta()
-        if content_text:
-            delta.content = content_text
-        if tool_calls:
-            delta.tool_calls = tool_calls
-            delta.role = "assistant"
-        return OpenAIChatCompletionStreamChoice(
-            index=candidate.index,
-            delta=delta,
-            finish_reason=_map_finish_reason(candidate.finishReason),
-        )
-    else:
-        message = OpenAIChatMessage(role="assistant", content=content_text)
-        if tool_calls:
-            message.tool_calls = tool_calls
-            message.content = None
-        return OpenAIChatCompletionChoice(
-            index=candidate.index,
-            message=message,
-            finish_reason=_map_finish_reason(candidate.finishReason),
-        )
+                delta = OpenAIDelta(tool_calls=[tool_call], role="assistant")
+                yield OpenAIChatCompletionStreamChoice(
+                    index=candidate.index, delta=delta, finish_reason=finish_reason
+                )
+            else:
+                # For non-streaming, the message content should be None when there are tool calls
+                message = OpenAIChatMessage(
+                    role="assistant", content=None, tool_calls=[tool_call]
+                )
+                yield OpenAIChatCompletionChoice(
+                    index=candidate.index, message=message, finish_reason=finish_reason
+                )
 
 
 def gemini_response_to_openai(
     gemini_response: GeminiResponse, original_request: OpenAIChatCompletionRequest
 ) -> OpenAIChatCompletionResponse:
     """Transforms a Gemini response into an OpenAI-compatible one."""
-    choices = [
-        _gemini_candidate_to_openai_choice(c, is_streaming=False)
-        for c in gemini_response.candidates
-    ]
+    choices = []
+    for c in gemini_response.candidates:
+        choices.extend(list(_gemini_candidate_to_openai_choices(c, is_streaming=False)))
 
     usage = OpenAIUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
     if gemini_response.usageMetadata:
@@ -338,11 +364,30 @@ def gemini_response_to_openai(
         )
         usage.total_tokens = gemini_response.usageMetadata.totalTokenCount or 0
 
+    response_id = (
+        f"chatcmpl-{gemini_response.responseId}"
+        if gemini_response.responseId
+        else generate_response_id("chatcmpl")
+    )
+    model = gemini_response.modelVersion or original_request.model
+
+    created_timestamp = int(time.time())
+    if gemini_response.createTime:
+        try:
+            dt_object = datetime.fromisoformat(
+                gemini_response.createTime.replace("Z", "+00:00")
+            )
+            created_timestamp = int(dt_object.timestamp())
+        except (ValueError, TypeError):
+            logger.warning(
+                f"Could not parse createTime '{gemini_response.createTime}', falling back to current time."
+            )
+
     return OpenAIChatCompletionResponse(
-        id="chatcmpl-" + str(uuid.uuid4()),
+        id=response_id,
         object="chat.completion",
-        created=int(time.time()),
-        model=original_request.model,
+        created=created_timestamp,
+        model=model,
         choices=choices,
         usage=usage,
     )
@@ -352,10 +397,10 @@ def gemini_stream_chunk_to_openai(
     gemini_chunk: GeminiResponse, model: str, response_id: str
 ) -> OpenAIChatCompletionStreamResponse:
     """Builds an OpenAI-compatible stream chunk from a Gemini response chunk."""
-    choices = [
-        _gemini_candidate_to_openai_choice(c, is_streaming=True)
-        for c in gemini_chunk.candidates
-    ]
+    choices = []
+    for c in gemini_chunk.candidates:
+        choices.extend(list(_gemini_candidate_to_openai_choices(c, is_streaming=True)))
+
     return OpenAIChatCompletionStreamResponse(
         id=response_id,
         object="chat.completion.chunk",
@@ -365,13 +410,22 @@ def gemini_stream_chunk_to_openai(
     )
 
 
-def _map_finish_reason(gemini_reason: Optional[str]) -> str:
-    """Maps Gemini's finish reason to OpenAI's, with logging for unexpected cases."""
+def _map_finish_reason(
+    gemini_reason: Optional[str], is_streaming: bool = False
+) -> Optional[str]:
+    """
+    Maps Gemini's finish reason to OpenAI's, handling streaming context.
+    For intermediate streaming chunks, a missing reason is expected and returns None.
+    For non-streaming responses, a missing reason is logged as a warning.
+    """
     if not gemini_reason:
-        logger.warning(
-            "Upstream response candidate missing finishReason, defaulting to 'stop'."
-        )
-        return "stop"
+        if is_streaming:
+            return None  # Expected for intermediate stream chunks
+        else:
+            logger.warning(
+                "Non-streaming upstream response candidate missing finishReason, defaulting to 'stop'."
+            )
+            return "stop"
 
     reason_map = {
         "STOP": "stop",

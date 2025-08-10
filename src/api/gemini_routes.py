@@ -1,21 +1,24 @@
 import json
-import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, Response, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import ValidationError
 
-from ..adapters.formatters import GeminiFormatter
-from ..core.auth import authenticate_user
+from ..adapters.formatters import FormatterContext, GeminiFormatter
 from ..core.credential_manager import ManagedCredential
-from ..core.google_api_client import prepare_credential, send_gemini_request
-from ..models.gemini import CountTokensResponse, GeminiRequest
+from ..core.proxy_auth import authenticate_user
+from ..models.gemini import (
+    BatchEmbedContentsRequest,
+    CountTokensRequest,
+    EmbedContentRequest,
+    GeminiRequest,
+)
+from ..services.chat_completion_service import chat_completion_service
 from ..services.embedding_service import embedding_service
+from ..services.model_service import model_service
 from ..utils.constants import SUPPORTED_MODELS
 from ..utils.logger import get_logger
-from ..utils.utils import build_gemini_url
-from .dependencies import get_request_body, get_validated_credential
-from .response_handler import handle_request
+from ..utils.utils import dump_model_with_extras, generate_response_id
+from .dependencies import get_validated_credential
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -37,18 +40,27 @@ async def generate_content(
     gemini_request: GeminiRequest,
     managed_cred: ManagedCredential = Depends(get_validated_credential),
 ):
-    formatter = GeminiFormatter(
-        {"response_id": f"chatcmpl-{uuid.uuid4()}", "model": model_name}
-    )
+    try:
+        formatter_context = FormatterContext(
+            response_id=generate_response_id("chatcmpl"), model=model_name
+        )
+        formatter = GeminiFormatter(formatter_context)
 
-    return await handle_request(
-        model_name=model_name,
-        action="generateContent",
-        managed_cred=managed_cred,
-        gemini_request_body=gemini_request,
-        is_streaming=False,
-        formatter=formatter,
-    )
+        return await chat_completion_service.handle_chat_request(
+            model_name=model_name,
+            managed_cred=managed_cred,
+            gemini_request_body=gemini_request,
+            is_streaming=False,
+            formatter=formatter,
+            source_api="Native Gemini",
+        )
+    except Exception as e:
+        logger.error(
+            f"Error processing Gemini generate content request: {e}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=500, detail="An unexpected internal server error occurred."
+        )
 
 
 @router.post("/models/{model_name:path}:streamGenerateContent")
@@ -57,65 +69,59 @@ async def stream_generate_content(
     gemini_request: GeminiRequest,
     managed_cred: ManagedCredential = Depends(get_validated_credential),
 ):
-    formatter = GeminiFormatter(
-        {"response_id": f"chatcmpl-{uuid.uuid4()}", "model": model_name}
-    )
+    try:
+        formatter_context = FormatterContext(
+            response_id=generate_response_id("chatcmpl"), model=model_name
+        )
+        formatter = GeminiFormatter(formatter_context)
 
-    return await handle_request(
-        model_name=model_name,
-        action="streamGenerateContent",
-        managed_cred=managed_cred,
-        gemini_request_body=gemini_request,
-        is_streaming=True,
-        formatter=formatter,
-    )
+        return await chat_completion_service.handle_chat_request(
+            model_name=model_name,
+            managed_cred=managed_cred,
+            gemini_request_body=gemini_request,
+            is_streaming=True,
+            formatter=formatter,
+            source_api="Native Gemini",
+        )
+    except Exception as e:
+        logger.error(
+            f"Error processing Gemini stream generate content request: {e}",
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500, detail="An unexpected internal server error occurred."
+        )
 
 
 @router.post("/models/{model_name:path}:countTokens")
 async def count_tokens(
     model_name: str,
+    request_body: CountTokensRequest,
     managed_cred: ManagedCredential = Depends(get_validated_credential),
-    incoming_payload: dict = Depends(get_request_body),
 ):
-    """Handles the countTokens request with its specific payload structure."""
-    try:
-        await prepare_credential(managed_cred)
-        target_url = build_gemini_url("countTokens", model_name)
-
-        final_payload = {"request": {"model": model_name, **incoming_payload}}
-
-        upstream_response = await send_gemini_request(
-            managed_cred, target_url, final_payload
-        )
-
-        validated_response = CountTokensResponse.model_validate(
-            upstream_response.json()
-        )
-        return JSONResponse(
-            content=validated_response.model_dump(exclude_unset=True),
-            status_code=200,
-        )
-    except (ValidationError, json.JSONDecodeError) as e:
-        logger.error(f"Error processing countTokens response: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"Error processing countTokens response: {e}"
-        )
-    except Exception as e:
-        logger.error(f"An unexpected error occurred in countTokens: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
+    """Handles the countTokens request by delegating to the ModelService."""
+    payload = dump_model_with_extras(request_body, exclude_unset=True)
+    validated_response = await model_service.count_tokens(
+        model_name, managed_cred, payload
+    )
+    return JSONResponse(
+        content=validated_response.model_dump(exclude_unset=True),
+        status_code=200,
+    )
 
 
 @router.post("/models/{model_name:path}:embedContent")
 async def embed_content(
     model_name: str,
-    incoming_payload: dict = Depends(get_request_body),
+    request_body: EmbedContentRequest,
     _user: str = Depends(authenticate_user),
 ):
     """Handles the native embedContent request via the EmbeddingService."""
+    payload = dump_model_with_extras(request_body, exclude_unset=True)
     validated_response = await embedding_service.execute_embedding_request(
         action="embedContent",
         model_name=model_name,
-        payload=incoming_payload,
+        payload=payload,
     )
     return JSONResponse(
         content=validated_response.model_dump(exclude_unset=True),
@@ -126,14 +132,15 @@ async def embed_content(
 @router.post("/models/{model_name:path}:batchEmbedContents")
 async def batch_embed_contents(
     model_name: str,
-    incoming_payload: dict = Depends(get_request_body),
+    request_body: BatchEmbedContentsRequest,
     _user: str = Depends(authenticate_user),
 ):
     """Handles the native batchEmbedContents request via the EmbeddingService."""
+    payload = dump_model_with_extras(request_body, exclude_unset=True)
     validated_response = await embedding_service.execute_embedding_request(
         action="batchEmbedContents",
         model_name=model_name,
-        payload=incoming_payload,
+        payload=payload,
     )
     return JSONResponse(
         content=validated_response.model_dump(exclude_unset=True),

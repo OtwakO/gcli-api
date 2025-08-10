@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from typing import List, Optional
 
 from fastapi import HTTPException
@@ -14,6 +15,10 @@ from .settings import settings
 
 logger = get_logger(__name__)
 
+# --- Constants for Backoff Mechanism ---
+INITIAL_BACKOFF_SECONDS = 60  # 1 minute
+MAX_BACKOFF_SECONDS = 600  # 10 minutes
+
 
 class ManagedCredential(BaseModel):
     """Encapsulates a credential and its associated state."""
@@ -22,7 +27,10 @@ class ManagedCredential(BaseModel):
     project_id: Optional[str] = None
     user_email: Optional[str] = None
     is_onboarded: bool = False
-    is_valid: bool = Field(True, exclude=True)  # Exclude from serialization
+
+    # --- In-memory state for backoff mechanism ---
+    last_failure_timestamp: Optional[float] = Field(None, exclude=True)
+    current_backoff_seconds: float = Field(INITIAL_BACKOFF_SECONDS, exclude=True)
 
     class Config:
         arbitrary_types_allowed = True
@@ -133,30 +141,35 @@ class CredentialManager:
         )
 
     async def _refresh_credential(self, managed_cred: ManagedCredential) -> bool:
-        """Refreshes a single credential and handles errors."""
+        """Refreshes a single credential and handles backoff logic."""
         email = managed_cred.user_email or "unknown_email"
-        project_id = managed_cred.project_id or "unknown_project"
         try:
-            logger.debug(
-                f"- Warming up and refreshing expired credential for {project_id} ({email})"
-            )
             await asyncio.to_thread(
                 managed_cred.credential.refresh, GoogleAuthRequest()
             )
-            logger.debug(
-                f"- Credential for {project_id} ({email}) refreshed successfully during warm-up."
-            )
+            # If refresh succeeds, reset the backoff state
+            if managed_cred.last_failure_timestamp:
+                logger.info(
+                    f"Credential for {email} recovered and refreshed successfully."
+                )
+                managed_cred.last_failure_timestamp = None
+                managed_cred.current_backoff_seconds = INITIAL_BACKOFF_SECONDS
             return True
         except RefreshError as e:
+            # If refresh fails, initiate or increase backoff
+            managed_cred.last_failure_timestamp = time.time()
             logger.error(
-                f"- Failed to refresh credential for {project_id} ({email}) during warm-up. "
-                f"Marking as invalid. Error: {e}"
+                f"Failed to refresh credential for {email}. "
+                f"Entering backoff for {managed_cred.current_backoff_seconds:.0f} seconds. Error: {e}"
             )
-            managed_cred.is_valid = False
+            # Exponentially increase backoff time
+            managed_cred.current_backoff_seconds = min(
+                managed_cred.current_backoff_seconds * 2, MAX_BACKOFF_SECONDS
+            )
             return False
         except Exception as e:
             logger.error(
-                f"An unexpected error occurred while refreshing credential for {email} during warm-up: {e}"
+                f"An unexpected error occurred while refreshing credential for {email}: {e}"
             )
             return False
 
@@ -166,7 +179,7 @@ class CredentialManager:
             return None
 
         async with self._lock:
-            # Loop through all available credentials once to find a valid one
+            # Loop through all available credentials to find a valid one
             for _ in range(len(self._credentials)):
                 index = self._next_credential_index
                 managed_cred = self._credentials[index]
@@ -174,53 +187,40 @@ class CredentialManager:
                     self._credentials
                 )
 
-                # Skip credentials that have been marked as invalid
-                if not managed_cred.is_valid:
-                    continue
-
                 email = managed_cred.user_email or "unknown_email"
-                token_snippet = managed_cred.credential.refresh_token[-5:]
-                project_id = managed_cred.project_id or "unknown_project"
+
+                # Check if the credential is in a backoff period
+                if managed_cred.last_failure_timestamp:
+                    time_since_failure = (
+                        time.time() - managed_cred.last_failure_timestamp
+                    )
+                    if time_since_failure < managed_cred.current_backoff_seconds:
+                        logger.debug(
+                            f"Skipping credential for {email} due to active backoff."
+                        )
+                        continue  # Skip to the next credential
+
                 log_info = {
                     "index": index,
                     "user_email": email,
-                    "project_id": project_id,
-                    "refresh_token_snippet": f"...{token_snippet}",
+                    "project_id": managed_cred.project_id or "unknown_project",
+                    "refresh_token_snippet": f"...{managed_cred.credential.refresh_token[-5:]}",
                 }
                 logger.info(format_log("Credential Selection", log_info, is_json=True))
 
-                # If the credential is not expired, it's good to use immediately
+                # If the credential is not expired, it's good to use
                 if not managed_cred.credential.expired:
                     return managed_cred
 
                 # If it's expired, try to refresh it
                 if managed_cred.credential.refresh_token:
-                    try:
-                        logger.info(
-                            f"Credential for {managed_cred.user_email} expired. Refreshing..."
-                        )
-                        await asyncio.to_thread(
-                            managed_cred.credential.refresh, GoogleAuthRequest()
-                        )
-                        logger.info(
-                            f"Credential for {managed_cred.user_email} refreshed successfully."
-                        )
+                    logger.info(f"Credential for {email} expired. Refreshing...")
+                    if await self._refresh_credential(managed_cred):
+                        logger.info(f"Credential for {email} refreshed successfully.")
                         return managed_cred  # Return the now-refreshed credential
-                    except RefreshError as e:
-                        logger.error(
-                            f"Failed to refresh credential for {managed_cred.user_email}. "
-                            f"This credential will be marked as invalid for this session. Error: {e}"
-                        )
-                        managed_cred.is_valid = False  # Mark as invalid
-                        continue  # Try the next credential
-                    except Exception as e:
-                        logger.error(
-                            f"An unexpected error occurred while refreshing credential for {managed_cred.user_email}: {e}"
-                        )
-                        # Don't mark as invalid for transient errors, just try the next one
-                        continue
+                    else:
+                        continue  # Refresh failed, try the next credential
 
-        # If we've looped through all credentials and found no valid ones
         logger.error(
             "No valid credentials available in the pool after checking all of them."
         )

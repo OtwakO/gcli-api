@@ -1,5 +1,6 @@
 import platform
 import copy
+import uuid
 from typing import Any, Dict
 
 from .constants import CLI_VERSION
@@ -23,6 +24,13 @@ def build_gemini_url(action: str, model_name: str = "") -> str:
         if "stream" in action.lower():
             url += "?alt=sse"
         return url
+
+
+def generate_response_id(prefix: str) -> str:
+    """Generates a unique response ID with a given prefix."""
+    if prefix == "msg":
+        return f"msg_{uuid.uuid4().hex}"
+    return f"{prefix}-{uuid.uuid4()}"
 
 
 def get_user_agent():
@@ -132,3 +140,17 @@ def summarize_embedding_logs(log_data: Any) -> Any:
 
     _summarize_recursive(log_data_copy)
     return log_data_copy
+
+
+def get_extra_fields(model) -> Dict[str, Any]:
+    """Safely extracts the dictionary of extra fields from a Pydantic model instance."""
+    if hasattr(model, "__pydantic_extra__") and model.__pydantic_extra__:
+        return model.__pydantic_extra__
+    return {}
+
+
+def dump_model_with_extras(model, **kwargs) -> Dict[str, Any]:
+    """Dumps a Pydantic model to a dict, including any extra fields."""
+    data = model.model_dump(**kwargs)
+    data.update(get_extra_fields(model))
+    return data

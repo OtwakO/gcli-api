@@ -3,7 +3,6 @@ from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 
 from pydantic import BaseModel
 
-from ..utils.logger import get_logger
 from ..models.claude import (
     ClaudeContentBlock,
     ClaudeContentBlockDelta,
@@ -25,6 +24,8 @@ from ..models.gemini import (
     GeminiResponse,
     GeminiSystemInstruction,
 )
+from ..utils.logger import get_logger
+from ..utils.utils import generate_response_id, get_extra_fields
 
 logger = get_logger(__name__)
 
@@ -129,6 +130,9 @@ def claude_request_to_gemini(
     }
     generation_config = {k: v for k, v in generation_config.items() if v is not None}
 
+    # Merge any extra, undefined parameters from the original request.
+    generation_config.update(get_extra_fields(claude_request))
+
     if (
         claude_request.response_format
         and claude_request.response_format.get("type") == "json_object"
@@ -167,6 +171,7 @@ class ClaudeStreamer:
         self.content_block_index = 0
         self.last_block_type = None
         self.message_started = False
+        self.meta_data_captured = False
 
     def _format_event(self, event_type: str, data: BaseModel) -> str:
         json_data = data.model_dump_json()
@@ -274,6 +279,10 @@ class ClaudeStreamer:
                     )
 
             if self.last_block_type:
+                # If the stream ends while a tool call is active, prioritize that as the stop reason.
+                if self.last_block_type == "tool_use":
+                    stop_reason = "tool_use"
+
                 yield self._format_event(
                     "content_block_stop",
                     ClaudeContentBlockStop(index=self.content_block_index),
@@ -297,6 +306,7 @@ def gemini_response_to_claude(
     Transforms a non-streaming Gemini response into a Claude-compatible Pydantic model.
     """
     content_blocks = []
+    stop_reason = None
 
     if gemini_response.candidates:
         candidate = gemini_response.candidates[0]
@@ -321,9 +331,19 @@ def gemini_response_to_claude(
         input_tokens = gemini_response.usageMetadata.promptTokenCount or 0
         output_tokens = gemini_response.usageMetadata.candidatesTokenCount or 0
 
+    # Use upstream response data when available, with robust fallbacks
+    if gemini_response.responseId:
+        response_id = f"msg_{gemini_response.responseId}"
+    elif original_request.id:
+        response_id = f"msg_{original_request.id}"
+    else:
+        response_id = generate_response_id("msg")
+
+    model = gemini_response.modelVersion or original_request.model
+
     return ClaudeMessageResponse(
-        id=f"msg_{original_request.id}",
-        model=original_request.model,
+        id=response_id,
+        model=model,
         content=content_blocks,
         stop_reason=stop_reason,
         usage=ClaudeUsage(input_tokens=input_tokens, output_tokens=output_tokens),
