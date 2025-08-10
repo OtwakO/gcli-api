@@ -29,7 +29,11 @@ from ..models.openai import (
 )
 from ..utils.constants import DEFAULT_SAFETY_SETTINGS
 from ..utils.logger import get_logger
-from ..utils.utils import generate_response_id, get_extra_fields
+from ..utils.utils import (
+    generate_response_id,
+    get_extra_fields,
+    sanitize_gemini_tools,
+)
 
 logger = get_logger(__name__)
 
@@ -272,12 +276,16 @@ def openai_request_to_gemini(req: OpenAIChatCompletionRequest) -> GeminiRequest:
     generation_config = _transform_generation_config(req)
     generation_config.update(get_extra_fields(req))
 
+    # Transform and then sanitize the tools
+    transformed_tools = _transform_tools(req)
+    sanitized_tools = sanitize_gemini_tools(transformed_tools)
+
     gemini_request = GeminiRequest(
         contents=_transform_messages(messages),
         generationConfig=generation_config,
         safetySettings=DEFAULT_SAFETY_SETTINGS,
         systemInstruction=system_instruction,
-        tools=_transform_tools(req),
+        tools=sanitized_tools,
         toolConfig=_transform_tool_config(req),
     )
 

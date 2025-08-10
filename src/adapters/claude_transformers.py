@@ -25,7 +25,11 @@ from ..models.gemini import (
     GeminiSystemInstruction,
 )
 from ..utils.logger import get_logger
-from ..utils.utils import generate_response_id, get_extra_fields
+from ..utils.utils import (
+    generate_response_id,
+    get_extra_fields,
+    sanitize_gemini_tools,
+)
 
 logger = get_logger(__name__)
 
@@ -151,11 +155,13 @@ def claude_request_to_gemini(
         ]
         tools = [{"functionDeclarations": gemini_tools}]
 
+    sanitized_tools = sanitize_gemini_tools(tools)
+
     gemini_request = GeminiRequest(
         contents=contents,
         systemInstruction=system_instruction,
         generationConfig=generation_config,
-        tools=tools,
+        tools=sanitized_tools,
     )
 
     return model_name, gemini_request

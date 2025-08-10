@@ -1,10 +1,10 @@
-import platform
 import copy
+import platform
 import uuid
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
-from .constants import CLI_VERSION
 from ..core.settings import settings
+from .constants import CLI_VERSION
 
 
 def build_gemini_url(action: str, model_name: str = "") -> str:
@@ -154,3 +154,38 @@ def dump_model_with_extras(model, **kwargs) -> Dict[str, Any]:
     data = model.model_dump(**kwargs)
     data.update(get_extra_fields(model))
     return data
+
+
+def sanitize_gemini_tools(
+    tools: Optional[List[Dict[str, Any]]],
+) -> Optional[List[Dict[str, Any]]]:
+    """
+    Removes the unsupported '$schema' key from Gemini tool parameters.
+
+    The Google Gemini API rejects tool definitions containing the '$schema' keyword.
+    This utility creates a deep copy of the tools structure and removes the
+    offending key from all function declaration parameters.
+
+    Args:
+        tools: A Gemini-formatted tools list (e.g., [{'functionDeclarations': ...}]).
+
+    Returns:
+        A sanitized deep copy of the tools list, or None if input is None.
+    """
+    if not tools:
+        return None
+
+    tools_copy = copy.deepcopy(tools)
+
+    # The Gemini tools structure is a list containing one dictionary
+    # which has the 'functionDeclarations'.
+    if (
+        tools_copy
+        and isinstance(tools_copy, list)
+        and tools_copy[0].get("functionDeclarations")
+    ):
+        for func_dec in tools_copy[0]["functionDeclarations"]:
+            if "parameters" in func_dec and isinstance(func_dec["parameters"], dict):
+                func_dec["parameters"].pop("$schema", None)
+
+    return tools_copy
