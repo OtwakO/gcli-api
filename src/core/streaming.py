@@ -5,12 +5,12 @@ import httpx
 from pydantic import ValidationError
 
 from ..adapters.formatters import Formatter, OpenAIFormatter
-from .upstream_auth import OAuthStrategy
 from ..core.credential_manager import ManagedCredential
 from ..models.gemini import GeminiResponse
 from ..utils.logger import format_log, get_logger, log_upstream_request
 from ..utils.utils import get_user_agent
 from .settings import settings
+from .upstream_auth import OAuthStrategy
 
 logger = get_logger(__name__)
 
@@ -21,6 +21,7 @@ async def _parse_google_sse(
     """
     Parses Google's SSE stream line-by-line.
     """
+    logger.debug("Starting to iterate over SSE stream from Google.")
     async for line in response.aiter_lines():
         if not line:
             continue
@@ -79,6 +80,7 @@ async def _parse_google_sse(
             logger.warning(
                 f"Skipping a malformed SSE chunk. Error: {e}. Chunk: '{data_str}'"
             )
+    logger.debug("Finished iterating over SSE stream from Google.")
 
 
 class StreamError(Exception):
@@ -153,6 +155,7 @@ class StreamProcessor:
         formats the output for the client, handling errors cleanly.
         """
         had_error = False
+        has_produced_content = False
         try:
             async for chunk in self._stream_generator():
                 if isinstance(chunk, StreamError):
@@ -160,27 +163,42 @@ class StreamProcessor:
                     logger.error(
                         f"Upstream API Error (Streaming): {chunk.status_code} - {chunk.message}"
                     )
-                    error_payload = {"error": {"message": chunk.message}}
-                    yield f"data: {json.dumps(error_payload)}\n\n"
-                    break  # Stop processing after a handled error
-                else:
-                    for event in self.formatter.format_chunk(chunk):
-                        yield event
+                    # Use the formatter to create a standard error message
+                    yield self.formatter.format_error_chunk(
+                        chunk.message, chunk.status_code
+                    )
+                    break
 
+                # A chunk is considered "content" if it has candidates with parts.
+                # Metadata-only chunks do not count.
+                if chunk.candidates and chunk.candidates[0].content:
+                    has_produced_content = True
+
+                for event in self.formatter.format_chunk(chunk):
+                    yield event
+
+            # After the loop, check for the empty stream scenario
+            if not had_error and not has_produced_content:
+                logger.warning(
+                    "Upstream stream finished without producing any content. Sending client error."
+                )
+                yield self.formatter.format_error_chunk(
+                    "The model did not generate any content. The stream is empty.", 400
+                )
+                had_error = True  # Mark as error to prevent [DONE] message
+
+            # If the stream was successful and had content, signal the end
             if not had_error:
-                # Signal the end of the stream to the formatter
                 for event in self.formatter.format_chunk(None):
                     yield event
 
         except Exception as e:
-            # This catches unexpected errors (bugs, network issues, etc.)
             logger.error("Generic stream processing error", exc_info=True)
-            error_payload = {
-                "error": {
-                    "message": f"An unexpected error occurred during streaming: {e}"
-                }
-            }
-            yield f"data: {json.dumps(error_payload)}\n\n"
+            yield self.formatter.format_error_chunk(
+                f"An unexpected error occurred during streaming: {e}", 500
+            )
+            had_error = True
 
-        if isinstance(self.formatter, OpenAIFormatter):
+        # Only send [DONE] for OpenAI if there wasn't an error
+        if isinstance(self.formatter, OpenAIFormatter) and not had_error:
             yield "data: [DONE]\n\n"

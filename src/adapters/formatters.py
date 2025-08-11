@@ -1,3 +1,4 @@
+import json
 from typing import Any, Generator, Optional, Union
 
 from pydantic import BaseModel
@@ -46,6 +47,11 @@ class Formatter:
         """Formats a complete, non-streaming GeminiResponse."""
         return response
 
+    def format_error_chunk(self, message: str, status_code: int = 500) -> str:
+        """Formats a generic error message into an SSE event string."""
+        error_payload = {"error": {"message": message, "code": status_code}}
+        return f"data: {json.dumps(error_payload)}\n\n"
+
 
 class GeminiFormatter(Formatter):
     """Formats responses for the native Gemini API."""
@@ -88,6 +94,14 @@ class OpenAIFormatter(Formatter):
                 chunk, self.model, self.response_id
             )
             yield f"data: {openai_chunk.model_dump_json(exclude_unset=True)}\n\n"
+
+    def format_error_chunk(self, message: str, status_code: int = 500) -> str:
+        """Formats an error message into an OpenAI-compatible SSE data chunk."""
+        # OpenAI errors typically have this structure
+        error_payload = {
+            "error": {"message": message, "type": "server_error", "code": None}
+        }
+        return f"data: {json.dumps(error_payload)}\n\n"
 
     def format_response(
         self,
@@ -142,6 +156,12 @@ class ClaudeFormatter(Formatter):
                 self.streamer.meta_data_captured = True
 
         yield from self.streamer.format_chunk(chunk)
+
+    def format_error_chunk(self, message: str, status_code: int = 500) -> str:
+        """Formats an error message using the Claude-specific 'error' event type."""
+        # Claude uses a specific event type for errors
+        error_payload = {"error": {"type": "server_error", "message": message}}
+        return f"event: error\ndata: {json.dumps(error_payload)}\n\n"
 
     def format_response(
         self,

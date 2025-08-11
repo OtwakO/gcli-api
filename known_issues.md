@@ -1,0 +1,1 @@
+# OpenAI route with streaming on might get prohibited empty result due to system instruction (Changing prompts to use user role might fix this issue, this is not a design flaw.)
