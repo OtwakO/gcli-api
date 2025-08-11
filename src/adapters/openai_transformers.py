@@ -31,7 +31,6 @@ from ..utils.constants import DEFAULT_SAFETY_SETTINGS
 from ..utils.logger import get_logger
 from ..utils.utils import (
     generate_response_id,
-    get_extra_fields,
     sanitize_gemini_tools,
 )
 
@@ -274,7 +273,6 @@ def openai_request_to_gemini(req: OpenAIChatCompletionRequest) -> GeminiRequest:
         messages.pop(system_message_index)
 
     generation_config = _transform_generation_config(req)
-    generation_config.update(get_extra_fields(req))
 
     # Transform and then sanitize the tools
     transformed_tools = _transform_tools(req)

@@ -195,7 +195,7 @@ class CredentialManager:
                         time.time() - managed_cred.last_failure_timestamp
                     )
                     if time_since_failure < managed_cred.current_backoff_seconds:
-                        logger.debug(
+                        logger.info(
                             f"Skipping credential for {email} due to active backoff."
                         )
                         continue  # Skip to the next credential

@@ -1,42 +1,40 @@
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
-
-from .base import ExtensibleModel
+from .base import LoggingBaseModel
 
 
 # Gemini Models
-class GeminiFunctionCall(BaseModel):
+class GeminiFunctionCall(LoggingBaseModel):
     name: str
     args: Dict[str, Any]
 
 
-class GeminiFunctionResponse(BaseModel):
+class GeminiFunctionResponse(LoggingBaseModel):
     name: str
     response: Dict[str, Any]
 
 
-class GeminiFileData(BaseModel):
+class GeminiFileData(LoggingBaseModel):
     mimeType: str
     fileUri: str
 
 
-class GeminiInlineData(BaseModel):
+class GeminiInlineData(LoggingBaseModel):
     mimeType: str
     data: str
 
 
-class GeminiExecutableCode(BaseModel):
+class GeminiExecutableCode(LoggingBaseModel):
     language: str
     code: str
 
 
-class GeminiCodeExecutionResult(BaseModel):
+class GeminiCodeExecutionResult(LoggingBaseModel):
     outcome: str
     output: str
 
 
-class GeminiPart(BaseModel):
+class GeminiPart(LoggingBaseModel):
     text: Optional[str] = None
     inlineData: Optional[GeminiInlineData] = None
     functionCall: Optional[GeminiFunctionCall] = None
@@ -48,25 +46,25 @@ class GeminiPart(BaseModel):
     thoughtSignature: Optional[str] = None
 
 
-class GeminiContent(BaseModel):
+class GeminiContent(LoggingBaseModel):
     role: str
     parts: List[GeminiPart] = []
 
 
-class GeminiSystemInstruction(BaseModel):
+class GeminiSystemInstruction(LoggingBaseModel):
     parts: List[GeminiPart]
 
 
-class GeminiFunctionCallingConfig(BaseModel):
+class GeminiFunctionCallingConfig(LoggingBaseModel):
     mode: Optional[str] = None  # "AUTO", "ANY", "NONE"
     allowedFunctionNames: Optional[List[str]] = None
 
 
-class GeminiToolConfig(BaseModel):
+class GeminiToolConfig(LoggingBaseModel):
     functionCallingConfig: Optional[GeminiFunctionCallingConfig] = None
 
 
-class GeminiRequest(BaseModel):
+class GeminiRequest(LoggingBaseModel):
     contents: List[GeminiContent]
     systemInstruction: Optional[GeminiSystemInstruction] = None
     tools: Optional[List[Dict[str, Any]]] = None
@@ -76,7 +74,7 @@ class GeminiRequest(BaseModel):
     cachedContent: Optional[str] = None
 
 
-class SafetyRating(BaseModel):
+class SafetyRating(LoggingBaseModel):
     category: str
     probability: str
     blocked: Optional[bool] = None
@@ -85,13 +83,13 @@ class SafetyRating(BaseModel):
     severityScore: Optional[float] = None
 
 
-class GroundingMetadata(BaseModel):
+class GroundingMetadata(LoggingBaseModel):
     webSearchQueries: Optional[List[str]] = None
     searchEntryPoint: Optional[Dict[str, Any]] = None
     retrievalMetadata: Optional[Dict[str, Any]] = None
 
 
-class GeminiCandidate(BaseModel):
+class GeminiCandidate(LoggingBaseModel):
     content: GeminiContent
     finishReason: Optional[str] = None
     index: int = 0
@@ -100,7 +98,7 @@ class GeminiCandidate(BaseModel):
     avgLogprobs: Optional[float] = None
 
 
-class GeminiUsageMetadata(BaseModel):
+class GeminiUsageMetadata(LoggingBaseModel):
     promptTokenCount: Optional[int] = None
     candidatesTokenCount: Optional[int] = None
     totalTokenCount: Optional[int] = None
@@ -110,12 +108,12 @@ class GeminiUsageMetadata(BaseModel):
     thoughtsTokenCount: Optional[int] = None
 
 
-class PromptFeedback(BaseModel):
+class PromptFeedback(LoggingBaseModel):
     blockReason: Optional[str] = None
     safetyRatings: Optional[List[SafetyRating]] = None
 
 
-class GeminiResponse(BaseModel):
+class GeminiResponse(LoggingBaseModel):
     candidates: List[GeminiCandidate]
     promptFeedback: Optional[PromptFeedback] = None
     usageMetadata: Optional[GeminiUsageMetadata] = None
@@ -124,7 +122,7 @@ class GeminiResponse(BaseModel):
     createTime: Optional[str] = None
 
 
-class CountTokensRequest(BaseModel):
+class CountTokensRequest(LoggingBaseModel):
     """Request model for the countTokens endpoint."""
 
     contents: List[GeminiContent]
@@ -135,7 +133,7 @@ class CountTokensRequest(BaseModel):
         extra = "allow"
 
 
-class EmbedContentRequest(BaseModel):
+class EmbedContentRequest(LoggingBaseModel):
     """Request model for the embedContent endpoint."""
 
     content: GeminiContent
@@ -146,7 +144,7 @@ class EmbedContentRequest(BaseModel):
         extra = "allow"
 
 
-class BatchEmbedRequestItem(BaseModel):
+class BatchEmbedRequestItem(LoggingBaseModel):
     """An item within a batch embedding request."""
 
     model: str
@@ -159,23 +157,23 @@ class BatchEmbedRequestItem(BaseModel):
         extra = "allow"
 
 
-class BatchEmbedContentsRequest(ExtensibleModel):
+class BatchEmbedContentsRequest(LoggingBaseModel):
     """Request model for the batchEmbedContents endpoint."""
 
     requests: List[BatchEmbedRequestItem]
 
 
-class CountTokensResponse(BaseModel):
+class CountTokensResponse(LoggingBaseModel):
     totalTokens: int
 
 
-class ContentEmbedding(BaseModel):
+class ContentEmbedding(LoggingBaseModel):
     values: List[float]
 
 
-class EmbedContentResponse(BaseModel):
+class EmbedContentResponse(LoggingBaseModel):
     embedding: ContentEmbedding
 
 
-class BatchEmbedContentResponse(BaseModel):
+class BatchEmbedContentResponse(LoggingBaseModel):
     embeddings: List[ContentEmbedding]

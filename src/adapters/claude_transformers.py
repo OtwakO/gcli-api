@@ -27,7 +27,6 @@ from ..models.gemini import (
 from ..utils.logger import get_logger
 from ..utils.utils import (
     generate_response_id,
-    get_extra_fields,
     sanitize_gemini_tools,
 )
 
@@ -133,9 +132,6 @@ def claude_request_to_gemini(
         "stopSequences": claude_request.stop_sequences,
     }
     generation_config = {k: v for k, v in generation_config.items() if v is not None}
-
-    # Merge any extra, undefined parameters from the original request.
-    generation_config.update(get_extra_fields(claude_request))
 
     if (
         claude_request.response_format

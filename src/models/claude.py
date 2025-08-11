@@ -2,6 +2,8 @@ from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel
 
+from .base import LoggingBaseModel
+
 
 # Claude Models
 class ClaudeMessage(BaseModel):
@@ -9,7 +11,7 @@ class ClaudeMessage(BaseModel):
     content: Union[str, List[Dict[str, Any]]]
 
 
-class ClaudeMessagesRequest(BaseModel):
+class ClaudeMessagesRequest(LoggingBaseModel):
     id: Optional[str] = None
     model: str
     messages: List[ClaudeMessage]

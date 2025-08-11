@@ -1,7 +1,8 @@
-import logging
 import json
-from rich.logging import RichHandler
+import logging
 from typing import Any
+
+from rich.logging import RichHandler
 
 from ..core.settings import settings
 
@@ -79,5 +80,26 @@ def format_log(title: str, content: Any, is_json: bool = False, indent: int = 2)
     return "---" + " " + title + " ---" + "\n" + str(formatted_content)
 
 
+def log_upstream_request(
+    url: str, headers: dict, payload: Any, auth_strategy_name: str
+):
+    """Logs a redacted, formatted upstream request if DEBUG is enabled."""
+    if settings.DEBUG:
+        from ..utils.utils import create_redacted_payload  # Lazy import
+
+        log_payload = (
+            create_redacted_payload(payload) if settings.DEBUG_REDACT_LOGS else payload
+        )
+        log_title = f"Upstream Request to Google ({auth_strategy_name})"
+        logger.debug(
+            format_log(
+                log_title,
+                {"url": url, "headers": headers, "payload": log_payload},
+                is_json=True,
+            )
+        )
+
+
 # Initialize logging when the module is imported
 setup_logging()
+logger = get_logger(__name__)

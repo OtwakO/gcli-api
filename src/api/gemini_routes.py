@@ -17,7 +17,7 @@ from ..services.embedding_service import embedding_service
 from ..services.model_service import model_service
 from ..utils.constants import SUPPORTED_MODELS
 from ..utils.logger import get_logger
-from ..utils.utils import dump_model_with_extras, generate_response_id
+from ..utils.utils import generate_response_id
 from .dependencies import get_validated_credential
 
 logger = get_logger(__name__)
@@ -100,7 +100,7 @@ async def count_tokens(
     managed_cred: ManagedCredential = Depends(get_validated_credential),
 ):
     """Handles the countTokens request by delegating to the ModelService."""
-    payload = dump_model_with_extras(request_body, exclude_unset=True)
+    payload = request_body.model_dump(exclude_unset=True)
     validated_response = await model_service.count_tokens(
         model_name, managed_cred, payload
     )
@@ -117,7 +117,7 @@ async def embed_content(
     _user: str = Depends(authenticate_user),
 ):
     """Handles the native embedContent request via the EmbeddingService."""
-    payload = dump_model_with_extras(request_body, exclude_unset=True)
+    payload = request_body.model_dump(exclude_unset=True)
     validated_response = await embedding_service.execute_embedding_request(
         action="embedContent",
         model_name=model_name,
@@ -136,7 +136,7 @@ async def batch_embed_contents(
     _user: str = Depends(authenticate_user),
 ):
     """Handles the native batchEmbedContents request via the EmbeddingService."""
-    payload = dump_model_with_extras(request_body, exclude_unset=True)
+    payload = request_body.model_dump(exclude_unset=True)
     validated_response = await embedding_service.execute_embedding_request(
         action="batchEmbedContents",
         model_name=model_name,

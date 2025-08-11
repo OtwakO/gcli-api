@@ -1,11 +1,13 @@
-from pydantic import BaseModel as PydanticBaseModel
 from typing import Any
+
+from pydantic import BaseModel as PydanticBaseModel
+
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-class ExtensibleModel(PydanticBaseModel):
+class LoggingBaseModel(PydanticBaseModel):
     """
     A custom Pydantic BaseModel that allows extra fields and logs a warning
     when they are encountered.

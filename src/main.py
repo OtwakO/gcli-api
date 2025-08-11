@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from contextlib import asynccontextmanager
 
@@ -7,12 +8,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .api.claude_routes import router as claude_router
-from .core.credential_manager import credential_manager
 from .api.gemini_routes import router as gemini_router
-from .utils.logger import format_log, get_logger
 from .api.openai_routes import router as openai_router
+from .core.credential_manager import credential_manager
 from .core.settings import settings
+from .utils.logger import format_log, get_logger
 from .utils.ui import create_page
+from .utils.utils import create_redacted_payload
 
 logger = get_logger(__name__)
 
@@ -81,6 +83,49 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def request_body_logging_middleware(request: Request, call_next):
+    """
+    Middleware to log the raw request body for debugging purposes.
+    It reconstructs the request so the body can be read again by the route handlers.
+    """
+    # We only care about POST requests to API routes
+    is_api_post = request.method == "POST" and (
+        "/v1/" in request.url.path or "/v1beta/" in request.url.path
+    )
+
+    if is_api_post and settings.DEBUG:
+        # Read the body once
+        body = await request.body()
+
+        if body:
+            try:
+                # Attempt to parse and log as pretty JSON
+                json_body = json.loads(body)
+                log_body = (
+                    create_redacted_payload(json_body)
+                    if settings.DEBUG_REDACT_LOGS
+                    else json_body
+                )
+                logger.debug(
+                    format_log("Original Request Payload", log_body, is_json=True)
+                )
+            except json.JSONDecodeError:
+                # If not JSON, log as plain text
+                logger.debug(
+                    format_log("Original Request Payload", body.decode("utf-8"))
+                )
+
+        # Reconstruct the request so the body can be read again by FastAPI
+        async def receive():
+            return {"type": "http.request", "body": body}
+
+        request = Request(request.scope, receive)
+
+    response = await call_next(request)
+    return response
 
 
 @app.middleware("http")

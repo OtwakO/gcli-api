@@ -4,14 +4,13 @@ from typing import Any, Dict
 import httpx
 from fastapi import HTTPException
 
-from ..utils.logger import format_log, get_logger
+from ..utils.logger import format_log, get_logger, log_upstream_request
 from ..utils.utils import (
-    create_redacted_payload,
     get_user_agent,
     summarize_embedding_logs,
 )
-from .upstream_auth import AuthStrategy
 from .settings import settings
+from .upstream_auth import AuthStrategy
 
 logger = get_logger(__name__)
 
@@ -29,26 +28,20 @@ async def send_request(
         **auth_strategy.get_headers(),  # Add auth-specific headers
     }
 
-    final_post_data = json.dumps(payload, ensure_ascii=False)
-
-    if settings.DEBUG:
-        log_payload = (
-            create_redacted_payload(payload) if settings.DEBUG_REDACT_LOGS else payload
-        )
-        log_title = f"Upstream Request to Google ({type(auth_strategy).__name__})"
-        logger.debug(
-            format_log(
-                log_title,
-                {"url": target_url, "headers": headers, "payload": log_payload},
-                is_json=True,
-            )
-        )
+    # Use the centralized logger to log the outgoing request.
+    log_upstream_request(
+        url=target_url,
+        headers=headers,
+        payload=payload,
+        auth_strategy_name=type(auth_strategy).__name__,
+    )
 
     async with httpx.AsyncClient(timeout=settings.UPSTREAM_TIMEOUT) as client:
         # Allow the strategy to modify the client (e.g., add query params)
         client = auth_strategy.prepare_client(client)
 
         try:
+            final_post_data = json.dumps(payload, ensure_ascii=False)
             response = await client.post(
                 target_url, data=final_post_data, headers=headers
             )

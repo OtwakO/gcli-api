@@ -8,7 +8,7 @@ from ..adapters.formatters import Formatter, OpenAIFormatter
 from .upstream_auth import OAuthStrategy
 from ..core.credential_manager import ManagedCredential
 from ..models.gemini import GeminiResponse
-from ..utils.logger import format_log, get_logger
+from ..utils.logger import format_log, get_logger, log_upstream_request
 from ..utils.utils import get_user_agent
 from .settings import settings
 
@@ -121,6 +121,14 @@ class StreamProcessor:
             **self.auth_strategy.get_headers(),
         }
         final_post_data = json.dumps(self.payload, ensure_ascii=False)
+
+        # Log the outgoing request using the centralized utility.
+        log_upstream_request(
+            url=self.target_url,
+            headers=headers,
+            payload=self.payload,
+            auth_strategy_name=type(self.auth_strategy).__name__,
+        )
 
         async with httpx.AsyncClient(timeout=settings.UPSTREAM_TIMEOUT) as client:
             async with client.stream(

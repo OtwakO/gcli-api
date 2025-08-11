@@ -3,15 +3,16 @@ from typing import Any, Dict, Union
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from ..adapters.formatters import Formatter
-from ..core.upstream_auth import OAuthStrategy
 from ..core.credential_manager import ManagedCredential
 from ..core.google_api_client import send_request
+from ..core.settings import settings
 from ..core.streaming import StreamProcessor
+from ..core.upstream_auth import OAuthStrategy
 from ..models.gemini import GeminiRequest, GeminiResponse
 from ..services.onboarding_service import onboarding_service
 from ..utils.constants import DEFAULT_SAFETY_SETTINGS
 from ..utils.logger import format_log, get_logger
-from ..utils.utils import build_gemini_url
+from ..utils.utils import build_gemini_url, create_redacted_payload
 
 logger = get_logger(__name__)
 
@@ -46,6 +47,20 @@ class ChatCompletionService:
             if isinstance(gemini_request_body, GeminiRequest)
             else gemini_request_body
         )
+
+        if settings.DEBUG:
+            log_payload = (
+                create_redacted_payload(request_payload)
+                if settings.DEBUG_REDACT_LOGS
+                else request_payload
+            )
+            logger.debug(
+                format_log(
+                    "Transformed Gemini Request Body",
+                    log_payload,
+                    is_json=True,
+                )
+            )
 
         if "safetySettings" not in request_payload:
             request_payload["safetySettings"] = DEFAULT_SAFETY_SETTINGS

@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel
 
-from .base import ExtensibleModel
+from .base import LoggingBaseModel
 
 
 # Tool Calling Models
@@ -26,7 +26,7 @@ class OpenAIChatMessage(BaseModel):
     tool_call_id: Optional[str] = None
 
 
-class OpenAIChatCompletionRequest(BaseModel):
+class OpenAIChatCompletionRequest(LoggingBaseModel):
     model: str
     messages: List[OpenAIChatMessage]
     stream: bool = False
@@ -41,9 +41,6 @@ class OpenAIChatCompletionRequest(BaseModel):
     response_format: Optional[Dict[str, Any]] = None
     tools: Optional[List[Dict[str, Any]]] = None
     tool_choice: Optional[Union[str, Dict[str, Any]]] = None
-
-    class Config:
-        extra = "allow"
 
 
 class OpenAIChatCompletionChoice(BaseModel):
@@ -82,7 +79,7 @@ class OpenAIChatCompletionStreamResponse(BaseModel):
 
 
 # OpenAI Embedding Models
-class OpenAIEmbeddingRequest(ExtensibleModel):
+class OpenAIEmbeddingRequest(LoggingBaseModel):
     input: Union[str, List[str], List[int], List[List[int]]]
     model: str
     encoding_format: Optional[str] = "float"
