@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from ..adapters.formatters import Formatter
 from ..core.credential_manager import ManagedCredential
+from ..core.exceptions import MalformedContentError
 from ..core.google_api_client import send_request
 from ..core.settings import settings
 from ..core.streaming import StreamProcessor
@@ -118,6 +119,29 @@ class ChatCompletionService:
         if not gemini_response_data:
             raise ValueError("Could not find 'response' or 'result' in upstream JSON")
 
+        # Pre-process candidates to handle responses with no valid content.
+        raw_candidates = gemini_response_data.get("candidates")
+        valid_candidates = []
+        if isinstance(raw_candidates, list):
+            valid_candidates = [
+                c for c in raw_candidates if isinstance(c, dict) and c.get("content")
+            ]
+
+        # If no valid candidates were found, raise a specific error.
+        if not valid_candidates:
+            finish_reason = None
+            if isinstance(raw_candidates, list) and raw_candidates:
+                first_candidate = raw_candidates[0]
+                if isinstance(first_candidate, dict):
+                    finish_reason = first_candidate.get("finishReason")
+            
+            logger.warning(
+                f"Upstream response contained no valid candidates. Finish Reason: {finish_reason}"
+            )
+            raise MalformedContentError(finish_reason=finish_reason)
+
+        # Proceed with the cleaned list of candidates.
+        gemini_response_data["candidates"] = valid_candidates
         gemini_response = GeminiResponse.model_validate(gemini_response_data)
         final_response_model = formatter.format_response(
             gemini_response, original_request

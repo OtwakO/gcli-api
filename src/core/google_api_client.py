@@ -2,7 +2,8 @@ import json
 from typing import Any, Dict
 
 import httpx
-from fastapi import HTTPException
+
+from ..core.exceptions import UpstreamHttpError
 
 from ..utils.logger import format_log, get_logger, log_upstream_request
 from ..utils.utils import (
@@ -53,16 +54,13 @@ async def send_request(
             except json.JSONDecodeError:
                 pass  # Keep body as text if not valid JSON
 
-            logger.error(
-                format_log(
-                    f"Upstream API Error ({e.response.status_code})",
-                    error_body,
-                    is_json=isinstance(error_body, dict),
-                )
+            log_message = format_log(
+                f"Upstream API Error ({e.response.status_code})",
+                error_body,
+                is_json=isinstance(error_body, dict),
             )
-            raise HTTPException(
-                status_code=e.response.status_code, detail=e.response.text
-            )
+            logger.warning(log_message)
+            raise UpstreamHttpError(status_code=e.response.status_code, detail=error_body)
 
     if settings.DEBUG:
         log_data = {

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from .api.claude_routes import router as claude_router
 from .api.gemini_routes import router as gemini_router
 from .api.openai_routes import router as openai_router
+from .core.exceptions import MalformedContentError, UpstreamHttpError
 from .core.credential_manager import credential_manager
 from .core.settings import settings
 from .utils.logger import format_log, get_logger
@@ -141,6 +142,28 @@ async def debug_logging_middleware(request: Request, call_next):
 
     response = await call_next(request)
     return response
+
+
+@app.exception_handler(MalformedContentError)
+async def malformed_content_exception_handler(request: Request, exc: MalformedContentError):
+    """Handles errors where the upstream response was empty or malformed."""
+    logger.error(f"MalformedContentError: {exc.message}")  # Graceful log, no traceback
+    return JSONResponse(
+        status_code=502,  # Bad Gateway
+        content={"error": {"message": exc.message, "type": "upstream_error"}},
+    )
+
+
+@app.exception_handler(UpstreamHttpError)
+async def upstream_http_exception_handler(request: Request, exc: UpstreamHttpError):
+    """Handles known HTTP errors from the upstream API gracefully."""
+    logger.warning(
+        f"Returning HTTP {exc.status_code} to client due to upstream error: {exc.detail}"
+    )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"message": exc.detail, "type": "upstream_api_error"}},
+    )
 
 
 @app.exception_handler(HTTPException)

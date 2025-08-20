@@ -1,10 +1,11 @@
 import json
 
-from fastapi import APIRouter, Depends, Response, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import JSONResponse
 
 from ..adapters.formatters import FormatterContext, GeminiFormatter
 from ..core.credential_manager import ManagedCredential
+from ..core.exceptions import MalformedContentError, UpstreamHttpError
 from ..core.proxy_auth import authenticate_user
 from ..models.gemini import (
     BatchEmbedContentsRequest,
@@ -54,9 +55,11 @@ async def generate_content(
             formatter=formatter,
             source_api="Native Gemini",
         )
+    except (UpstreamHttpError, MalformedContentError):
+        raise
     except Exception as e:
         logger.error(
-            f"Error processing Gemini generate content request: {e}", exc_info=True
+            f"Error Processing Gemini generate content request: {e}", exc_info=True
         )
         raise HTTPException(
             status_code=500, detail="An unexpected internal server error occurred."
@@ -83,9 +86,11 @@ async def stream_generate_content(
             formatter=formatter,
             source_api="Native Gemini",
         )
+    except (UpstreamHttpError, MalformedContentError):
+        raise
     except Exception as e:
         logger.error(
-            f"Error processing Gemini stream generate content request: {e}",
+            f"Error Processing Gemini stream generate content request: {e}",
             exc_info=True,
         )
         raise HTTPException(

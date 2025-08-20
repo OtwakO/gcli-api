@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..adapters.adapters import claude_adapter
 from ..adapters.formatters import FormatterContext
 from ..core.credential_manager import ManagedCredential
+from ..core.exceptions import MalformedContentError, UpstreamHttpError
 from ..models.claude import ClaudeMessagesRequest
 from ..services.chat_completion_service import chat_completion_service
 from ..utils.logger import get_logger
@@ -43,9 +44,10 @@ async def claude_messages(
             source_api="Claude-compatible",
             original_request=claude_request,
         )
-
+    except (UpstreamHttpError, MalformedContentError):
+        raise
     except Exception as e:
-        logger.error(f"Error processing Claude request: {e}", exc_info=True)
+        logger.error(f"Error Processing Claude request: {e}", exc_info=True)
         raise HTTPException(
             status_code=500, detail="An unexpected internal server error occurred."
         )

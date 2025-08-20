@@ -160,7 +160,7 @@ class StreamProcessor:
             async for chunk in self._stream_generator():
                 if isinstance(chunk, StreamError):
                     had_error = True
-                    logger.error(
+                    logger.warning(
                         f"Upstream API Error (Streaming): {chunk.status_code} - {chunk.message}"
                     )
                     # Use the formatter to create a standard error message

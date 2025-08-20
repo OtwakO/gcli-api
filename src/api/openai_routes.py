@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from ..adapters.adapters import openai_adapter, openai_embedding_adapter
 from ..adapters.formatters import FormatterContext
 from ..core.credential_manager import ManagedCredential
+from ..core.exceptions import MalformedContentError, UpstreamHttpError
 from ..core.proxy_auth import authenticate_user
 from ..models.openai import (
     OpenAIChatCompletionRequest,
@@ -42,10 +43,10 @@ async def openai_embeddings(
         formatter = openai_embedding_adapter.formatter_class(formatter_context)
         return formatter.format_response(validated_gemini_response, request)
 
-    except (HTTPException, ValidationError):
+    except (UpstreamHttpError, MalformedContentError, ValidationError):
         raise
     except Exception as e:
-        logger.error(f"Error processing OpenAI embedding request: {e}", exc_info=True)
+        logger.error(f"Error Processing OpenAI embedding request: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail="An unexpected internal server error occurred.",
@@ -75,9 +76,11 @@ async def openai_chat_completions(
             source_api="OpenAI-compatible",
             original_request=request,
         )
+    except (UpstreamHttpError, MalformedContentError):
+        raise
     except Exception as e:
         logger.error(
-            f"Error processing OpenAI chat completions request: {e}", exc_info=True
+            f"Error Processing OpenAI chat completions request: {e}", exc_info=True
         )
         raise HTTPException(
             status_code=500,
