@@ -145,7 +145,9 @@ async def debug_logging_middleware(request: Request, call_next):
 
 
 @app.exception_handler(MalformedContentError)
-async def malformed_content_exception_handler(request: Request, exc: MalformedContentError):
+async def malformed_content_exception_handler(
+    request: Request, exc: MalformedContentError
+):
     """Handles errors where the upstream response was empty or malformed."""
     logger.error(f"MalformedContentError: {exc.message}")  # Graceful log, no traceback
     return JSONResponse(

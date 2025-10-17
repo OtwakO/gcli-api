@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     )
 
     # --- Feature Flags & Configuration ---
+    UNSUPPORTED_TOOL_SCHEMA_KEYS: List[str] = Field(
+        default=["$schema", "exclusiveMinimum"],
+        description="A list of JSON schema keys to be removed from tool definitions as they are not supported by the Gemini API.",
+    )
 
     # --- Debugging ---
     DEBUG: bool = Field(

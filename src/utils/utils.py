@@ -160,11 +160,11 @@ def sanitize_gemini_tools(
     tools: Optional[List[Dict[str, Any]]],
 ) -> Optional[List[Dict[str, Any]]]:
     """
-    Removes the unsupported '$schema' key from Gemini tool parameters.
+    Recursively removes unsupported keys from Gemini tool definitions based on a
+    centralized configuration in `settings.UNSUPPORTED_TOOL_SCHEMA_KEYS`.
 
-    The Google Gemini API rejects tool definitions containing the '$schema' keyword.
-    This utility creates a deep copy of the tools structure and removes the
-    offending key from all function declaration parameters.
+    This utility ensures that tool schemas sent to the Gemini API are compliant
+    by stripping out fields that would otherwise cause validation errors.
 
     Args:
         tools: A Gemini-formatted tools list (e.g., [{'functionDeclarations': ...}]).
@@ -176,16 +176,26 @@ def sanitize_gemini_tools(
         return None
 
     tools_copy = copy.deepcopy(tools)
+    unsupported_keys = set(settings.UNSUPPORTED_TOOL_SCHEMA_KEYS)
 
-    # The Gemini tools structure is a list containing one dictionary
-    # which has the 'functionDeclarations'.
+    def _recursive_remove_keys(obj: Any):
+        if isinstance(obj, dict):
+            for key in list(obj.keys()):
+                if key in unsupported_keys:
+                    del obj[key]
+                else:
+                    _recursive_remove_keys(obj[key])
+        elif isinstance(obj, list):
+            for item in obj:
+                _recursive_remove_keys(item)
+
     if (
         tools_copy
         and isinstance(tools_copy, list)
         and tools_copy[0].get("functionDeclarations")
     ):
         for func_dec in tools_copy[0]["functionDeclarations"]:
-            if "parameters" in func_dec and isinstance(func_dec["parameters"], dict):
-                func_dec["parameters"].pop("$schema", None)
+            if "parameters" in func_dec:
+                _recursive_remove_keys(func_dec["parameters"])
 
     return tools_copy

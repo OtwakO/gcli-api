@@ -134,7 +134,7 @@ class ChatCompletionService:
                 first_candidate = raw_candidates[0]
                 if isinstance(first_candidate, dict):
                     finish_reason = first_candidate.get("finishReason")
-            
+
             logger.warning(
                 f"Upstream response contained no valid candidates. Finish Reason: {finish_reason}"
             )

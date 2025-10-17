@@ -18,7 +18,7 @@ from ..services.embedding_service import embedding_service
 from ..services.model_service import model_service
 from ..utils.constants import SUPPORTED_MODELS
 from ..utils.logger import get_logger
-from ..utils.utils import generate_response_id
+from ..utils.utils import generate_response_id, sanitize_gemini_tools
 from .dependencies import get_validated_credential
 
 logger = get_logger(__name__)
@@ -46,6 +46,8 @@ async def generate_content(
             response_id=generate_response_id("chatcmpl"), model=model_name
         )
         formatter = GeminiFormatter(formatter_context)
+
+        gemini_request.tools = sanitize_gemini_tools(gemini_request.tools)
 
         return await chat_completion_service.handle_chat_request(
             model_name=model_name,
@@ -77,6 +79,8 @@ async def stream_generate_content(
             response_id=generate_response_id("chatcmpl"), model=model_name
         )
         formatter = GeminiFormatter(formatter_context)
+
+        gemini_request.tools = sanitize_gemini_tools(gemini_request.tools)
 
         return await chat_completion_service.handle_chat_request(
             model_name=model_name,

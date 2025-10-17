@@ -60,7 +60,9 @@ async def send_request(
                 is_json=isinstance(error_body, dict),
             )
             logger.warning(log_message)
-            raise UpstreamHttpError(status_code=e.response.status_code, detail=error_body)
+            raise UpstreamHttpError(
+                status_code=e.response.status_code, detail=error_body
+            )
 
     if settings.DEBUG:
         log_data = {

@@ -4,17 +4,15 @@ import os
 import re
 
 import httpx
-
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-
-from ..utils.ui import create_page
 from google_auth_oauthlib.flow import Flow
 
-from ..utils.constants import SCOPES
 from ..core.settings import settings
+from ..utils.constants import SCOPES
+from ..utils.logger import format_log, get_logger, setup_logging
+from ..utils.ui import create_page
 from ..utils.utils import get_client_metadata, get_user_agent
-from ..utils.logger import setup_logging, get_logger, format_log
 
 # --- Logging Configuration ---
 setup_logging()

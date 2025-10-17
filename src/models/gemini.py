@@ -1,4 +1,6 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
+
+from pydantic import field_validator
 
 from .base import LoggingBaseModel
 
@@ -67,11 +69,27 @@ class GeminiToolConfig(LoggingBaseModel):
 class GeminiRequest(LoggingBaseModel):
     contents: List[GeminiContent]
     systemInstruction: Optional[GeminiSystemInstruction] = None
-    tools: Optional[List[Dict[str, Any]]] = None
+    tools: Optional[Union[List[Dict[str, Any]], Dict[str, Any]]] = None
     toolConfig: Optional[GeminiToolConfig] = None
     safetySettings: Optional[List[Dict[str, Any]]] = None
     generationConfig: Optional[Dict[str, Any]] = None
     cachedContent: Optional[str] = None
+
+    @field_validator("tools")
+    @classmethod
+    def normalize_tools_format(cls, v):
+        if v is None:
+            return None
+        # If v is a dict like {"functionDeclarations": [...]}, wrap it in a list.
+        if isinstance(v, dict) and "functionDeclarations" in v:
+            return [v]
+        # If it's already a list, assume it's correct.
+        if isinstance(v, list):
+            return v
+        # If it's something else, raise an error.
+        raise ValueError(
+            "Invalid format for 'tools'. Expected a list or a dict with 'functionDeclarations'."
+        )
 
 
 class SafetyRating(LoggingBaseModel):
