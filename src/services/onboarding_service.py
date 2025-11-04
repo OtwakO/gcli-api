@@ -4,10 +4,10 @@ import random
 
 from fastapi import HTTPException
 
-from ..core.upstream_auth import OAuthStrategy
 from ..core.credential_manager import ManagedCredential
 from ..core.google_api_client import send_request
 from ..core.settings import settings
+from ..core.upstream_auth import OAuthStrategy
 from ..utils.logger import get_logger
 from ..utils.utils import get_client_metadata
 
@@ -95,11 +95,16 @@ class OnboardingService:
             # Step 2: Find the default tier and onboard the user
             tier = next(
                 (t for t in load_data.get("allowedTiers", []) if t.get("isDefault")),
-                {"id": "legacy-tier"},
+                {"id": "standard-tier"},
             )
 
+            # tier = next(
+            #     (t for t in load_data.get("allowedTiers", []) if t.get("isDefault")),
+            #     {"id": "legacy-tier"},
+            # )
+
             onboard_req_payload = {
-                "tierId": tier.get("id"),
+                "tierId": tier.get("id", "standard-tier"),
                 "cloudaicompanionProject": project_id,
                 "metadata": get_client_metadata(project_id),
             }
