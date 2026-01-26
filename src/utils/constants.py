@@ -10,7 +10,8 @@ from .logger import get_logger
 logger = get_logger(__name__)
 
 # Client Configuration
-CLI_VERSION = "0.9.0"  # Match current gemini-cli version
+# CLI_VERSION = "0.9.0"  # Match current gemini-cli version
+CLI_VERSION = "0.22.0"  # Match current gemini-cli version
 
 SCOPES = [
     "openid",

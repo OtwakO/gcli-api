@@ -97,6 +97,10 @@ class OnboardingService:
                 (t for t in load_data.get("allowedTiers", []) if t.get("isDefault")),
                 {"id": "standard-tier"},
             )
+            # tier = {"id": "legacy-tier"}
+
+            tier["id"] = "free-tier"
+            logger.info(f"Onboarding tier selected: {tier}")
 
             # tier = next(
             #     (t for t in load_data.get("allowedTiers", []) if t.get("isDefault")),

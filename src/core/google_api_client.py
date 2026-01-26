@@ -4,7 +4,6 @@ from typing import Any, Dict
 import httpx
 
 from ..core.exceptions import UpstreamHttpError
-
 from ..utils.logger import format_log, get_logger, log_upstream_request
 from ..utils.utils import (
     get_user_agent,

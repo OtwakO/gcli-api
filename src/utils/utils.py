@@ -36,8 +36,10 @@ def generate_response_id(prefix: str) -> str:
 def get_user_agent():
     """Generate User-Agent string matching gemini-cli format."""
     version = CLI_VERSION
-    system = platform.system()
-    arch = platform.machine()
+    # system = platform.system()
+    # arch = platform.machine()
+    system = "LINUX"
+    arch = "AMD64"
     return f"GeminiCLI/{version} ({system}; {arch})"
 
 
@@ -45,6 +47,8 @@ def get_platform_string():
     """Generate platform string matching gemini-cli format."""
     system = platform.system().upper()
     arch = platform.machine().upper()
+    system = "LINUX"
+    arch = "AMD64"
 
     # Map to gemini-cli platform format
     if system == "DARWIN":
@@ -70,6 +74,15 @@ def get_client_metadata(project_id=None):
         "pluginType": "GEMINI",
         "duetProject": project_id,
     }
+
+
+# def get_client_metadata(project_id=None):
+#     return {
+#         "ideType": "VSCODE",
+#         "platform": get_platform_string(),
+#         "pluginType": "CLOUD_CODE",
+#         "duetProject": project_id,
+#     }
 
 
 def _redact_recursive(obj: Any):
