@@ -49,6 +49,26 @@ class ChatCompletionService:
             else gemini_request_body
         )
 
+        # Adding -search suffix handling for Google Search tool integration
+        if model_name.endswith("-search"):
+            model_name = model_name[:-7]  # Remove "-search"
+
+            # Initialize tools list if missing or None
+            if "tools" not in request_payload or request_payload["tools"] is None:
+                request_payload["tools"] = []
+
+            # Ensure tools is a list (Gemini API expects a list of tool objects)
+            if isinstance(request_payload["tools"], dict):
+                request_payload["tools"] = [request_payload["tools"]]
+
+            # Add Google Search tool if not present
+            has_search = any("googleSearch" in t for t in request_payload["tools"])
+            if not has_search:
+                logger.info(
+                    f"Enabling Google Search grounding for model '{model_name}'"
+                )
+                request_payload["tools"].append({"googleSearch": {}})
+
         if settings.DEBUG:
             log_payload = (
                 create_redacted_payload(request_payload)
